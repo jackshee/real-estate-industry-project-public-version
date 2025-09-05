@@ -54,6 +54,8 @@ class DomainRentalSpider(scrapy.Spider):
 
         try:
             df = pd.read_csv(csv_path)
+            # sort by suburb alphabetically
+            df = df.sort_values(by="suburb")
             self.logger.info(f"Loaded {len(df)} suburb-postcode pairs from CSV")
             return df
         except Exception as e:
@@ -118,9 +120,11 @@ class DomainRentalSpider(scrapy.Spider):
         # Get unique suburb-postcode combinations
         unique_suburbs = self.suburb_data.drop_duplicates(["suburb", "postcode"])
 
-        # For testing, limit to first 5 suburbs
+        # For testing, limit to Abbotsford only
         # Remove this line to process all suburbs
-        unique_suburbs = unique_suburbs.head(1)
+        unique_suburbs = unique_suburbs[
+            unique_suburbs["suburb"].str.lower() == "abbotsford"
+        ]
         self.logger.info(
             f"Processing {len(unique_suburbs)} suburbs (limited for testing)"
         )

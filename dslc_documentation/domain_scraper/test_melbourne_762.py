@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script to verify Melbourne has 762 listings with ?ssubs=0 parameter
+Test script to verify Abbotsford has 32 listings with ?ssubs=0 parameter
 """
 
 import subprocess
@@ -10,11 +10,11 @@ import sys
 from pathlib import Path
 
 
-def test_melbourne_762():
-    """Test that Melbourne has exactly 762 listings with ?ssubs=0"""
-    print("=== MELBOURNE 762 LISTINGS TEST ===")
-    print("Testing Melbourne (3000) with ?ssubs=0 parameter...")
-    print("Expected: 762 listings (based on Domain website)")
+def test_abbotsford_32():
+    """Test that Abbotsford has exactly 32 listings with ?ssubs=0"""
+    print("=== ABBOTSFORD 32 LISTINGS TEST ===")
+    print("Testing Abbotsford (3067) with ?ssubs=0 parameter...")
+    print("Expected: 32 listings (based on Domain website)")
 
     # Change to the scraper directory
     scraper_dir = Path(__file__).parent
@@ -27,15 +27,15 @@ def test_melbourne_762():
     os.chdir(scraper_dir)
 
     # Output file for this test
-    output_file = "melbourne_762_test.json"
+    output_file = "abbotsford_32_test.json"
 
     # Remove existing output file if it exists
     if os.path.exists(output_file):
         os.remove(output_file)
 
     try:
-        # Run the scraper with specific settings for Melbourne
-        print("Running scraper for Melbourne...")
+        # Run the scraper with specific settings for Abbotsford
+        print("Running scraper for Abbotsford...")
         cmd = [
             "scrapy",
             "crawl",
@@ -43,7 +43,7 @@ def test_melbourne_762():
             "-o",
             output_file,
             "-s",
-            "CLOSESPIDER_ITEMCOUNT=1000",  # Stop after 1000 items
+            "CLOSESPIDER_ITEMCOUNT=100",  # Stop after 100 items (more than expected 32)
             "-L",
             "INFO",  # Set log level to INFO
         ]
@@ -74,17 +74,17 @@ def test_melbourne_762():
         print(f"Total listings scraped: {total_count}")
 
         # Check if we got the expected count
-        if total_count == 762:
-            print("🎉 SUCCESS: Found exactly 762 Melbourne listings!")
+        if total_count == 32:
+            print("🎉 SUCCESS: Found exactly 32 Abbotsford listings!")
             return True
-        elif total_count > 762:
+        elif total_count > 32:
             print(
-                f"⚠️  WARNING: Found {total_count} Melbourne listings (more than expected 762)"
+                f"⚠️  WARNING: Found {total_count} Abbotsford listings (more than expected 32)"
             )
             return False
         else:
             print(
-                f"❌ FAILURE: Found only {total_count} Melbourne listings (expected 762)"
+                f"❌ FAILURE: Found only {total_count} Abbotsford listings (expected 32)"
             )
             return False
 
@@ -98,7 +98,7 @@ def test_melbourne_762():
 
 def analyze_results():
     """Analyze the scraped results"""
-    output_file = "melbourne_762_test.json"
+    output_file = "abbotsford_32_test.json"
 
     if not os.path.exists(output_file):
         print("No output file found for analysis")
@@ -126,18 +126,18 @@ def analyze_results():
         if listings:
             sample = listings[0]
             print(f"\nSample listing:")
-            print(f"  Title: {sample.get('listing_title', 'N/A')}")
-            print(f"  Address: {sample.get('address_line_1', 'N/A')}")
+            print(f"  Address: {sample.get('full_address', 'N/A')}")
             print(f"  Suburb: {sample.get('suburb', 'N/A')}")
             print(f"  Property Type: {sample.get('property_type', 'N/A')}")
             print(f"  Photos: {sample.get('number_of_photos', 'N/A')}")
+            print(f"  Price: {sample.get('rental_price', 'N/A')}")
 
     except Exception as e:
         print(f"Error analyzing results: {e}")
 
 
 if __name__ == "__main__":
-    success = test_melbourne_762()
+    success = test_abbotsford_32()
     analyze_results()
 
     if success:
