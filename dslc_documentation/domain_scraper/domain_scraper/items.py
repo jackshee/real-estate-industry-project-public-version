@@ -71,6 +71,11 @@ class DomainScraperItem(scrapy.Item):
     inspection_text = scrapy.Field()  # Inspection text
     appointment_only = scrapy.Field()  # Appointment only flag
 
+    # School information
+    schools = (
+        scrapy.Field()
+    )  # List of tuples: (school_name, school_type, school_level, distance)
+
     # Scraping metadata
     suburb = scrapy.Field()  # Suburb used for scraping (from CSV)
     postcode = scrapy.Field()  # Postcode used for scraping (from CSV)

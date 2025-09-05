@@ -316,6 +316,9 @@ class DomainRentalSpider(scrapy.Spider):
                     item["inspection_text"] = inspection.get("inspectionText", "")
                     item["appointment_only"] = inspection.get("appointmentOnly", "")
 
+                # School information
+                item["schools"] = self._extract_schools(component_props)
+
                 self.logger.info(
                     "Successfully extracted detailed property data from JSON"
                 )
@@ -619,6 +622,31 @@ class DomainRentalSpider(scrapy.Spider):
 
             self.logger.error(f"Traceback: {traceback.format_exc()}")
             return
+
+    def _extract_schools(self, component_props):
+        """Extract school information from componentProps"""
+        schools = []
+
+        try:
+            school_catchment = component_props.get("schoolCatchment", {})
+            schools_data = school_catchment.get("schools", [])
+
+            for school in schools_data:
+                school_name = school.get("name", "")
+                school_type = school.get("type", "")
+                school_level = school.get("educationLevel", "")
+                distance = school.get("distance", 0.0)
+
+                # Only add schools with valid data
+                if school_name and school_type and school_level:
+                    schools.append((school_name, school_type, school_level, distance))
+
+            self.logger.info(f"Extracted {len(schools)} schools")
+
+        except Exception as e:
+            self.logger.error(f"Error extracting schools: {str(e)}")
+
+        return schools
 
     def _log_suburb_stats(self, suburb, postcode, final_page):
         """Log statistics for a suburb when scraping is complete"""
