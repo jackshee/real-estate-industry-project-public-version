@@ -1,24 +1,14 @@
 # Domain.com.au Rental Property Scraper (Scrapy)
 
-A comprehensive Scrapy-based web scraper for extracting detailed rental property listings from Domain.com.au. This scraper extracts **50+ attributes** per property including basic property information, detailed features, location data, market insights, demographics, and school information.
-
-## Features
-
-- **Comprehensive Data Extraction**: 50+ attributes per property including property details, market insights, demographics, and school information
-- **Multi-Suburb Scraping**: Scrapes all Victorian suburbs from CSV file with dynamic page limits
-- **School Information**: Extracts nearby schools with distance, type, and level data
-- **Market Insights**: Suburb-level rental prices, demographics, and market trends
-- **Image Extraction**: Uses Selenium to extract property photo URLs
-- **Built-in Rate Limiting**: Anti-bot protection with configurable delays
-- **Data Validation**: Automatic cleaning and validation of scraped data
-- **Multiple Output Formats**: JSON, CSV support
-- **Error Handling**: Robust retry logic and error recovery
+A Scrapy-based web scraper for extracting detailed rental property listings from Domain.com.au. This scraper extracts **50+ attributes** per property including basic property information, detailed features, location data, market insights, demographics, and school information.
 
 ## Installation
 
+Highly recommended to make a new virtual environment `venv`
+
 1. Install required packages:
 ```bash
-pip install scrapy beautifulsoup4 requests selenium webdriver-manager pandas numpy
+pip install -r requirements.txt 
 ```
 
 2. Navigate to the project directory:
@@ -75,8 +65,6 @@ scrapy crawl domain_rental -s CLOSESPIDER_ITEMCOUNT=100 -o output.json
 
 ### Data Extraction Process
 
-The scraper uses a sophisticated approach to extract comprehensive property data:
-
 1. **Suburb-Based Scraping**: Reads Victorian suburbs from `vic_suburbs_postcodes.csv`
 2. **Dynamic Page Limits**: Automatically detects when no more listings are available (up to 50 pages per suburb)
 3. **Dual Data Sources**: 
@@ -122,9 +110,7 @@ The scraper extracts **50+ attributes** per property, organized into several cat
 ### 1. **Core Property Features**
 ```json
 {
-  "beds": 2,
-  "baths": 1,
-  "parking": 1,
+  "property_features": "2,1,-", // Two bedroom, 1 bath, no parking 
   "property_type": "Apartment / Unit / Flat",
   "rental_price": "$650 per week"
 }
@@ -159,6 +145,10 @@ The scraper extracts **50+ attributes** per property, organized into several cat
 ```
 
 ### 4. **Market Insights**
+
+
+These are based on the median for the dwelling type for the suburb. 
+
 ```json
 {
   "median_rent_price": 550,
@@ -213,36 +203,6 @@ The scraper extracts **50+ attributes** per property, organized into several cat
 }
 ```
 
-## School Information Details
-
-The scraper extracts comprehensive school information for each property:
-
-### School Data Structure
-Each school is represented as a tuple: `(school_name, school_type, school_level, distance)`
-
-- **School Name**: Full name of the school
-- **School Type**: "Government", "Catholic", or "Private"
-- **School Level**: "primary", "secondary", "combined", or "childcare"
-- **Distance**: Distance from property in meters (as float)
-
-### School Categories
-- **Primary Schools**: Prep to Year 6
-- **Secondary Schools**: Year 7 to Year 12
-- **Combined Schools**: Prep to Year 12
-- **Childcare**: Early childhood education
-
-### Example School Data
-```python
-schools = [
-    ("Yarra Primary School", "Government", "primary", 390.44),
-    ("Trinity Catholic School", "Catholic", "primary", 526.29),
-    ("Xavier College - Burke Hall", "Catholic", "combined", 805.81),
-    ("Richmond High School", "Government", "secondary", 842.12)
-]
-```
-
-## Performance
-
 - **Processing Speed**: Approximately 1 property per 2-3 seconds (including individual page scraping)
 - **Rate Limiting**: Built-in throttling to avoid being blocked
 - **Error Handling**: Robust retry logic for failed requests
@@ -266,15 +226,6 @@ You can customize the scraper by:
 3. Adding new data fields in `items.py`
 4. Customizing data processing in `pipelines.py`
 
-## Troubleshooting
-
-### Common Issues
-
-1. **Connection errors**: The scraper includes retry logic and rate limiting
-2. **Empty results**: Check if the website structure has changed
-3. **Blocked requests**: Increase `DOWNLOAD_DELAY` in settings
-4. **Selenium errors**: Ensure Chrome browser is installed for image extraction
-
 ### Logs
 Check the `scrapy.log` file for detailed information about the scraping process.
 
@@ -287,12 +238,3 @@ Check the `scrapy.log` file for detailed information about the scraping process.
 - `school_scraping_analysis.md` - Detailed school data documentation
 - `domain_rental_attributes_documentation.md` - Complete attribute reference
 - `listing_analysis_report.md` - HTML structure analysis
-
-## Use Cases
-
-This comprehensive dataset is perfect for:
-- **Rental Price Prediction**: Machine learning models using property features, location, and market data
-- **Market Analysis**: Understanding rental trends across Victorian suburbs
-- **School Proximity Analysis**: Impact of nearby schools on rental prices
-- **Demographic Studies**: Neighborhood composition and rental patterns
-- **Property Investment Research**: Market insights and rental yields
