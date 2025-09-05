@@ -26,14 +26,9 @@ data/geo/vic_suburbs_postcodes.csv
 
 ### Basic Usage
 
-Run the spider to scrape all Victorian suburbs and save to JSON:
-```bash
-scrapy crawl domain_rental -o domain_rental_listings.json
-```
-
 Save to CSV format:
 ```bash
-scrapy crawl domain_rental -o domain_rental_listings.csv
+scrapy crawl domain_rental -o data/raw/domain/rental_listings_YYYY_MM.csv
 ```
 
 ### Test with Limited Suburbs

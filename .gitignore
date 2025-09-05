@@ -150,7 +150,6 @@ local.properties
 httpcache/
 
 # Data files
-data/raw/
 
 
 # Log files
