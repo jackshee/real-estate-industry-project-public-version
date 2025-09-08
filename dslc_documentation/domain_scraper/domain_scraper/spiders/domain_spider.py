@@ -14,6 +14,7 @@ import scrapy
 import re
 import pandas as pd
 import os
+import time
 from urllib.parse import urlparse, parse_qs
 from tqdm import tqdm
 from selenium import webdriver
@@ -35,6 +36,7 @@ class DomainRentalSpider(scrapy.Spider):
         super().__init__()
         self.suburb_data = self._load_suburb_data()
         self.suburb_stats = {}  # Track listings per suburb
+        self.suburb_timings = {}  # Track timing for each suburb
         self.current_suburb = None
         self.current_postcode = None
         self.current_page = 0
@@ -65,17 +67,21 @@ class DomainRentalSpider(scrapy.Spider):
     # No longer using start_urls - will generate URLs dynamically
     start_urls = []
 
-    # Custom settings for this spider
+    # Custom settings for this spider - Optimized for better performance
     custom_settings = {
         "USER_AGENT": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "DOWNLOAD_DELAY": 1,  # 1 second delay between requests
-        "RANDOMIZE_DOWNLOAD_DELAY": 0.5,  # Randomize delay by 0.5 seconds
-        "CONCURRENT_REQUESTS": 1,  # Process one request at a time
+        "DOWNLOAD_DELAY": 0.5,  # Reduced delay for faster scraping
+        "RANDOMIZE_DOWNLOAD_DELAY": 0.3,  # Randomize delay by 0.3 seconds
+        "CONCURRENT_REQUESTS": 8,  # Increased from 1 to 8 concurrent requests
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 4,  # Limit per domain to avoid being blocked
         "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 1,
-        "AUTOTHROTTLE_MAX_DELAY": 10,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
-        "AUTOTHROTTLE_DEBUG": True,
+        "AUTOTHROTTLE_START_DELAY": 0.5,  # Reduced start delay
+        "AUTOTHROTTLE_MAX_DELAY": 5,  # Reduced max delay
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 4.0,  # Increased target concurrency
+        "AUTOTHROTTLE_DEBUG": False,  # Disable debug for cleaner logs
+        "RETRY_TIMES": 3,  # Retry failed requests up to 3 times
+        "RETRY_HTTP_CODES": [500, 502, 503, 504, 408, 429],  # Retry on these HTTP codes
+        "DOWNLOAD_TIMEOUT": 30,  # 30 second timeout for requests
     }
 
     def _init_selenium_driver(self):
@@ -108,6 +114,13 @@ class DomainRentalSpider(scrapy.Spider):
 
     def closed(self, reason):
         """Called when spider is closed"""
+        # Log completion of final suburb if any
+        if self.current_suburb and self.current_suburb in self.suburb_timings:
+            self._log_suburb_completion()
+
+        # Log final summary
+        self._log_final_summary()
+
         self._close_selenium_driver()
         super().closed(reason)
 
@@ -478,12 +491,29 @@ class DomainRentalSpider(scrapy.Spider):
             page_number = response.meta.get("page_number", 1)
             suburb_url_base = response.meta.get("suburb_url_base", "")
 
-            # Update progress tracking
+            # Update progress tracking and start timing for new suburb
             if self.current_suburb != suburb or self.current_postcode != postcode:
+                # Log completion of previous suburb if exists
+                if self.current_suburb and self.current_suburb in self.suburb_timings:
+                    self._log_suburb_completion()
+
+                # Start timing for new suburb
                 self.current_suburb = suburb
                 self.current_postcode = postcode
                 self.current_page = 0
                 self.total_listings = 0
+
+                # Initialize timing for this suburb
+                self.suburb_timings[suburb] = {
+                    "start_time": time.time(),
+                    "postcode": postcode,
+                    "pages_scraped": 0,
+                    "listings_found": 0,
+                }
+
+                self.logger.info(
+                    f"🚀 STARTING SUBURB: {suburb} ({postcode}) at {time.strftime('%H:%M:%S')}"
+                )
 
             self.current_page = page_number
 
@@ -509,7 +539,7 @@ class DomainRentalSpider(scrapy.Spider):
                 self.logger.info(
                     f"No more listings found for {suburb} ({postcode}) on page {page_number}"
                 )
-                self._log_suburb_stats(suburb, postcode, page_number - 1)
+                self._log_suburb_completion()
                 return
 
             # Check if response is empty
@@ -548,6 +578,11 @@ class DomainRentalSpider(scrapy.Spider):
 
             self.suburb_stats[suburb]["total_listings"] += len(listing_items)
             self.suburb_stats[suburb]["pages_scraped"] = page_number
+
+            # Update timing stats
+            if suburb in self.suburb_timings:
+                self.suburb_timings[suburb]["pages_scraped"] = page_number
+                self.suburb_timings[suburb]["listings_found"] += len(listing_items)
 
             # Extract information from each listing
             for i, li in enumerate(listing_items):
@@ -609,7 +644,7 @@ class DomainRentalSpider(scrapy.Spider):
                 self.logger.info(
                     f"No listings found for {suburb} on page {page_number} - stopping pagination"
                 )
-                self._log_suburb_stats(suburb, postcode, page_number - 1)
+                self._log_suburb_completion()
 
             self.logger.info(f"=== FINISHED PARSING {suburb} PAGE {page_number} ===")
 
@@ -648,17 +683,135 @@ class DomainRentalSpider(scrapy.Spider):
 
         return schools
 
+    def _log_suburb_completion(self):
+        """Log completion statistics for the current suburb with timing information"""
+        if not self.current_suburb or self.current_suburb not in self.suburb_timings:
+            return
+
+        suburb = self.current_suburb
+        timing_data = self.suburb_timings[suburb]
+        stats = self.suburb_stats.get(suburb, {})
+
+        # Calculate timing
+        end_time = time.time()
+        duration = end_time - timing_data["start_time"]
+        duration_minutes = duration / 60
+
+        # Calculate rates
+        listings_per_minute = (
+            timing_data["listings_found"] / duration_minutes
+            if duration_minutes > 0
+            else 0
+        )
+        pages_per_minute = (
+            timing_data["pages_scraped"] / duration_minutes
+            if duration_minutes > 0
+            else 0
+        )
+
+        # Log completion with timing
+        self.logger.info(f"🏁 COMPLETED SUBURB: {suburb} ({timing_data['postcode']})")
+        self.logger.info(
+            f"⏱️  Duration: {duration_minutes:.2f} minutes ({duration:.1f} seconds)"
+        )
+        self.logger.info(f"📊 Total listings found: {timing_data['listings_found']}")
+        self.logger.info(f"📄 Pages scraped: {timing_data['pages_scraped']}")
+        self.logger.info(
+            f"⚡ Rate: {listings_per_minute:.1f} listings/min, {pages_per_minute:.1f} pages/min"
+        )
+
+        if timing_data["pages_scraped"] > 0:
+            avg_listings_per_page = (
+                timing_data["listings_found"] / timing_data["pages_scraped"]
+            )
+            self.logger.info(
+                f"📈 Average listings per page: {avg_listings_per_page:.2f}"
+            )
+
+        # Store final timing data
+        timing_data["end_time"] = end_time
+        timing_data["duration_seconds"] = duration
+        timing_data["duration_minutes"] = duration_minutes
+        timing_data["listings_per_minute"] = listings_per_minute
+        timing_data["pages_per_minute"] = pages_per_minute
+
+    def _log_final_summary(self):
+        """Log final summary of all suburbs scraped"""
+        if not self.suburb_timings:
+            return
+
+        total_suburbs = len(self.suburb_timings)
+        total_listings = sum(
+            timing["listings_found"] for timing in self.suburb_timings.values()
+        )
+        total_pages = sum(
+            timing["pages_scraped"] for timing in self.suburb_timings.values()
+        )
+
+        # Calculate overall timing
+        all_start_times = [
+            timing["start_time"] for timing in self.suburb_timings.values()
+        ]
+        all_end_times = [
+            timing.get("end_time", time.time())
+            for timing in self.suburb_timings.values()
+        ]
+
+        if all_start_times and all_end_times:
+            overall_start = min(all_start_times)
+            overall_end = max(all_end_times)
+            total_duration = overall_end - overall_start
+            total_duration_minutes = total_duration / 60
+
+            overall_listings_per_minute = (
+                total_listings / total_duration_minutes
+                if total_duration_minutes > 0
+                else 0
+            )
+            overall_pages_per_minute = (
+                total_pages / total_duration_minutes
+                if total_duration_minutes > 0
+                else 0
+            )
+
+            self.logger.info("=" * 80)
+            self.logger.info("🎯 FINAL SCRAPING SUMMARY")
+            self.logger.info("=" * 80)
+            self.logger.info(f"📊 Total suburbs processed: {total_suburbs}")
+            self.logger.info(f"🏠 Total listings found: {total_listings}")
+            self.logger.info(f"📄 Total pages scraped: {total_pages}")
+            self.logger.info(
+                f"⏱️  Total duration: {total_duration_minutes:.2f} minutes ({total_duration:.1f} seconds)"
+            )
+            self.logger.info(
+                f"⚡ Overall rate: {overall_listings_per_minute:.1f} listings/min, {overall_pages_per_minute:.1f} pages/min"
+            )
+
+            if total_pages > 0:
+                avg_listings_per_page = total_listings / total_pages
+                self.logger.info(
+                    f"📈 Average listings per page: {avg_listings_per_page:.2f}"
+                )
+
+            # Show fastest and slowest suburbs
+            suburb_durations = [
+                (suburb, timing.get("duration_minutes", 0))
+                for suburb, timing in self.suburb_timings.items()
+            ]
+            suburb_durations.sort(key=lambda x: x[1])
+
+            if suburb_durations:
+                fastest = suburb_durations[0]
+                slowest = suburb_durations[-1]
+                self.logger.info(
+                    f"🚀 Fastest suburb: {fastest[0]} ({fastest[1]:.2f} min)"
+                )
+                self.logger.info(
+                    f"🐌 Slowest suburb: {slowest[0]} ({slowest[1]:.2f} min)"
+                )
+
+            self.logger.info("=" * 80)
+
     def _log_suburb_stats(self, suburb, postcode, final_page):
-        """Log statistics for a suburb when scraping is complete"""
-        if suburb in self.suburb_stats:
-            stats = self.suburb_stats[suburb]
-            self.logger.info(f"=== {suburb} ({postcode}) COMPLETE ===")
-            self.logger.info(f"Total listings found: {stats['total_listings']}")
-            self.logger.info(f"Pages scraped: {final_page}")
-            self.logger.info(
-                f"Average listings per page: {stats['total_listings'] / final_page if final_page > 0 else 0:.2f}"
-            )
-        else:
-            self.logger.info(
-                f"=== {suburb} ({postcode}) COMPLETE - No listings found ==="
-            )
+        """Legacy method - now calls _log_suburb_completion"""
+        self._log_suburb_completion()
