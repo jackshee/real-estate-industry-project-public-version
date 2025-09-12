@@ -8,7 +8,11 @@ import scrapy
 
 class DomainScraperItem(scrapy.Item):
     # Property listing data fields
-    property_features = scrapy.Field()  # Comma-delimited property features
+    property_features = scrapy.Field()  # Comma-delimited property features (legacy)
+    bedrooms = scrapy.Field()  # Number of bedrooms
+    bathrooms = scrapy.Field()  # Number of bathrooms
+    car_spaces = scrapy.Field()  # Number of car spaces
+    land_area = scrapy.Field()  # Land area (if available)
     property_type = scrapy.Field()  # Property type (house, apartment, etc.)
     url = scrapy.Field()  # URL of the listing page
 
