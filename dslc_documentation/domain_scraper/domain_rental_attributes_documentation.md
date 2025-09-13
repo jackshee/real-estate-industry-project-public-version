@@ -1,45 +1,39 @@
 # Domain.com.au Rental Listings - Data Attributes Documentation
 
-This document provides a comprehensive overview of all data attributes extracted from Domain.com.au rental listings in the `domain_rental_listings_detailed.json` file.
+This document provides a comprehensive overview of all data attributes extracted from Domain.com.au rental listings using the `domain_rental` Scrapy spider.
 
 ## Overview
 
-The dataset contains **50+ attributes** per listing, organized into several categories:
+The dataset contains **60+ attributes** per listing, organized into several categories:
 - Basic property information (from search results)
 - Detailed property features (from individual listing pages)
 - Location and address data
 - Agent and agency information
 - Market insights and demographics
 - Property history and metadata
+- School catchment information
+- Media and inspection details
 
 ---
 
 ## 📋 **Attribute Categories**
 
-### 1. **Basic Property Information** (from search results)
+### **Basic Property Information** (from search summary results)
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `listing_title` | String | Price/title displayed on search results | "From $42 pw" |
-| `address_line_1` | String | First line of address | "5 Enterprise Way" |
-| `suburb` | String | Suburb from search results | "YARRAWONGA" |
-| `state` | String | State abbreviation | "VIC" |
-| `postcode` | String | Postcode from search results | "3730" |
-| `property_features` | String | Comma-delimited basic features | "1, , 1, , −," |
+| `suburb` | String | Suburb from search results | "abbotsford" |
+| `postcode` | String | Postcode from search results | "3067" |
+| `property_features` | String | Comma-delimited basic features (legacy) | "1, , 1, , −," |
+| `bedrooms` | String | Number of bedrooms from search results | "1" |
+| `bathrooms` | String | Number of bathrooms from search results | "1" |
+| `car_spaces` | String | Number of car spaces from search results | "1" |
+| `land_area` | String | Land area from search results | "500m²" |
 | `property_type` | String | Property type from search results | "Apartment / Unit / Flat" |
-| `page_number` | Integer | Which search page the listing was found on | 2 |
-| `url` | String | URL of the search results page | "https://www.domain.com.au/rent/?sort=price-asc&state=vic&page=2" |
+| `url` | String | URL of the individual listing page | "https://www.domain.com.au/5-enterprise-way-yarrawonga-vic-3730-17240713" |
 
-### 2. **Core Property Features** (from detailed listing pages)
 
-| Attribute | Type | Description | Example |
-|-----------|------|-------------|---------|
-| `beds` | Integer | Number of bedrooms | 1 |
-| `baths` | Integer | Number of bathrooms | 1 |
-| `parking` | Integer | Number of parking spaces | 1 |
-| `property_type_detailed` | String | Detailed property type | "Apartment / Unit / Flat" |
-
-### 3. **Address Details**
+### **Address Details**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -47,11 +41,11 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 | `unit_number` | String | Unit/apartment number | "2" |
 | `street_number` | String | Street number | "5" |
 | `street` | String | Street name | "Enterprise Way" |
-| `suburb_detailed` | String | Detailed suburb name | "Yarrawonga" |
-| `postcode_detailed` | String | Detailed postcode | "3730" |
+| `suburb` | String | Suburb name (from search) | "abbotsford" |
+| `postcode` | String | Postcode (from search) | "3067" |
 | `state_abbreviation` | String | State abbreviation (lowercase) | "vic" |
 
-### 4. **Property Identification**
+###  **Property Identification**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -59,7 +53,7 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 | `listing_id` | Integer | Listing ID (usually same as property_id) | 17240713 |
 | `listing_url` | String | Full URL to the property listing | "https://www.domain.com.au/5-enterprise-way-yarrawonga-vic-3730-17240713" |
 
-### 5. **Agent and Agency Information**
+###  **Agent and Agency Information**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -70,7 +64,7 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 | `agency_logo` | String | URL to agency logo | "https://rimh2.domainstatic.com.au/..." |
 | `agency_profile_url` | String | URL to agency profile page | "https://www.domain.com.au/real-estate-agencies/..." |
 
-### 6. **Property Details**
+### **Property Details**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -78,7 +72,7 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 | `features_list` | Array | List of property features | ["Roller Door Access", "Security System"] |
 | `structured_features` | Array | Structured feature data with categories | [{"name": "Roller Door Access", "category": "Other", "source": "advertiser"}] |
 
-### 7. **Price and Status Information**
+### **Price and Status Information**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -86,14 +80,14 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 | `listing_status` | String | Current listing status | "live", "depositTaken", "recentlyUpdated" |
 | `listing_tag` | String | Additional status tag | "Deposit taken" |
 
-### 8. **Location Data**
+### **Location Data**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `latitude` | Float | Property latitude coordinate | -36.0117489 |
 | `longitude` | Float | Property longitude coordinate | 146.0284363 |
 
-### 9. **Market Insights (Suburb Level)**
+### **Market Insights (Suburb Level)**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -103,7 +97,7 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 | `renter_percentage` | Float | Percentage of renters in suburb | 0.4242454328832407 |
 | `single_percentage` | Float | Percentage of single households in suburb | 0.5199547016557325 |
 
-### 10. **Neighbourhood Demographics**
+### **Neighbourhood Demographics**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -117,7 +111,7 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 | `family_percentage` | Float | Percentage of family households | 0.421052635 |
 | `single_percentage_detailed` | Float | Detailed single household percentage | 0.578947365 |
 
-### 11. **Domain Insights (Property History)**
+### **Domain Insights (Property History)**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -126,13 +120,20 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 | `updated_date` | String | Date listing was last updated | "2024-10-07T16:32:10.26" |
 | `number_sold` | Integer | Number of properties sold in area | 26 |
 
-### 12. **Media and Inspection**
+### **Media**
 
 | Attribute | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `number_of_photos` | Integer | Number of photos in gallery | 5 |
+| `image_urls` | Array | List of image URLs | ["https://domain.com/photo1.jpg", "https://domain.com/photo2.jpg"] |
 | `inspection_text` | String | Inspection text/instructions | "" |
 | `appointment_only` | Boolean | Whether inspection is appointment only | true |
+
+### **School Catchment Information**
+
+| Attribute | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `schools` | Array | List of school tuples | [("Melbourne High School", "Government", "Secondary", 0.5), ("Richmond Primary", "Government", "Primary", 0.2)] |
 
 ---
 
@@ -140,15 +141,16 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 
 ### **Missing Values**
 - Some fields may be empty strings (`""`) or `null` when data is not available
-- Common missing fields: `baths`, `parking`, `agent_phone`, `agent_email`
+- Common missing fields: `bathrooms`, `car_spaces`, `agent_phone`, `agent_email`
 - `last_sold_date` is often `null` for rental properties
+- `land_area` is frequently missing for apartments/units
 
 ### **Data Types**
-- **Integers**: `beds`, `baths`, `parking`, `property_id`, `listing_id`, `number_of_photos`
+- **Integers**: `property_id`, `listing_id`, `number_of_photos`, `number_sold`
 - **Floats**: All percentage and coordinate values
-- **Strings**: Most text fields, dates, URLs
+- **Strings**: Most text fields, dates, URLs, property features
 - **Booleans**: `appointment_only`
-- **Arrays**: `features_list`, `structured_features`
+- **Arrays**: `features_list`, `structured_features`, `image_urls`, `schools`
 
 ### **Encoded Data**
 - `agent_email` is base64 encoded and needs decoding for use
@@ -163,8 +165,8 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 ## 📊 **Feature Categories for Machine Learning**
 
 ### **High-Impact Features** (Strongly correlated with price)
-- `beds`, `baths`, `parking` - Core property features
-- `property_type_detailed` - Property type classification
+- `bedrooms`, `bathrooms`, `car_spaces` - Core property features
+- `property_type` - Property type classification
 - `latitude`, `longitude` - Location coordinates
 - `median_rent_price` - Market context
 
@@ -173,18 +175,22 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 - `number_of_photos` - Listing quality indicator
 - `description` - Text features for NLP analysis
 - `listing_status` - Market availability
+- `land_area` - Property size (when available)
 
 ### **Context Features** (Location and market dependent)
-- `suburb_detailed`, `postcode_detailed` - Location identifiers
+- `suburb`, `postcode` - Location identifiers
 - `renter_percentage`, `single_percentage` - Demographics
 - `avg_days_on_market` - Market activity
 - `age_*` fields - Neighbourhood demographics
+- `schools` - School catchment information
 
 ### **Derived Features** (Can be engineered)
-- Price per bedroom: `rental_price / beds`
+- Price per bedroom: `rental_price / bedrooms`
 - Distance to CBD: Calculate from coordinates
 - Feature count: Length of `features_list`
 - Days since listed: Calculate from `first_listed_date`
+- School count: Length of `schools` array
+- Average school distance: Calculate from `schools` data
 
 ---
 
@@ -195,29 +201,77 @@ The dataset contains **50+ attributes** per listing, organized into several cate
 2. Decode base64 encoded emails
 3. Parse dates for temporal analysis
 4. Extract numeric values from price strings
+5. Convert string property features to integers where possible
+6. Handle missing land area values appropriately
 
 ### **Feature Engineering**
 1. Create price per bedroom/bathroom ratios
 2. Calculate distance to city center
 3. Extract keywords from descriptions
 4. Create suburb-level aggregations
+5. Parse land area strings to numeric values
+6. Extract school information from `schools` array
+7. Create property size indicators from `land_area`
 
 ### **Model Development**
-1. Use `beds`, `baths`, `parking` as primary features
-2. Include location features (`latitude`, `longitude`, `suburb_detailed`)
+1. Use `bedrooms`, `bathrooms`, `car_spaces` as primary features
+2. Include location features (`latitude`, `longitude`, `suburb`)
 3. Add market context (`median_rent_price`, `renter_percentage`)
 4. Consider text features from `description` and `features_list`
+5. Include school catchment data from `schools` array
+6. Use `land_area` for property size analysis
 
 ---
 
 ## 📈 **Sample Data Statistics**
 
-Based on the current dataset:
-- **Total Listings**: 50 properties
-- **Price Range**: $42/week to $380/week
-- **Property Types**: Apartments, Houses, Studios, Car spaces
-- **Geographic Coverage**: Various Victorian suburbs
+Based on the current scraper implementation:
+- **Test Suburb**: Abbotsford (3067) - can be configured for any Victorian suburb
+- **Property Types**: Apartments, Houses, Studios, Car spaces, Units
+- **Geographic Coverage**: All Victorian suburbs (configurable)
 - **Data Completeness**: Varies by field (80-95% for core features)
+- **Scraping Performance**: 6-8 listings per minute with optimized settings
+- **Concurrent Requests**: 8 concurrent requests with AutoThrottle enabled
+
+---
+
+## 🛠️ **Scraper Configuration**
+
+### **Current Settings**
+The scraper is optimized for performance with the following configuration:
+- **DOWNLOAD_DELAY**: 0.5 seconds
+- **CONCURRENT_REQUESTS**: 8
+- **AUTOTHROTTLE_ENABLED**: True
+- **RETRY_TIMES**: 3
+- **DOWNLOAD_TIMEOUT**: 30 seconds
+
+### **Usage**
+```bash
+# Run the scraper
+cd domain_scraper
+scrapy crawl domain_rental -o results.json
+
+# Save as CSV
+scrapy crawl domain_rental -o results.csv
+
+# Save as JSON with custom settings
+scrapy crawl domain_rental -o results.json -s CONCURRENT_REQUESTS=16 -s DOWNLOAD_DELAY=0.1
+```
+
+### **Property Features Parsing**
+The scraper automatically splits the `property_features` field into individual components:
+- **Input**: `"1, , 1, , −,"` (bedrooms, bathrooms, car spaces, land area)
+- **Output**: 
+  - `bedrooms`: "1"
+  - `bathrooms`: "" (empty)
+  - `car_spaces`: "1" 
+  - `land_area`: "" (empty)
+
+### **Data Sources**
+- **Search Results**: Basic property information, bedrooms, bathrooms, car spaces
+- **Individual Listings**: Detailed property data, agent info, market insights
+- **Selenium Integration**: Image URLs extraction
+- **JSON Parsing**: Structured data from Domain's internal APIs
 
 ---
 

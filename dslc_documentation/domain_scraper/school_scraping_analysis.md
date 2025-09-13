@@ -120,3 +120,6 @@ This data can be used to create features such as:
 - Distance to nearest secondary school
 - Number of private vs government schools nearby
 - Average distance to all schools
+
+
+

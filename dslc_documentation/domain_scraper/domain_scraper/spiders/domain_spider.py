@@ -133,14 +133,8 @@ class DomainRentalSpider(scrapy.Spider):
         # Get unique suburb-postcode combinations
         unique_suburbs = self.suburb_data.drop_duplicates(["suburb", "postcode"])
 
-        # For testing, limit to Abbotsford only
-        # Remove this line to process all suburbs
-        unique_suburbs = unique_suburbs[
-            unique_suburbs["suburb"].str.lower() == "abbotsford"
-        ]
-        self.logger.info(
-            f"Processing {len(unique_suburbs)} suburbs (limited for testing)"
-        )
+        # Process all suburbs
+        self.logger.info(f"Processing {len(unique_suburbs)} suburbs")
 
         for idx, row in unique_suburbs.iterrows():
             suburb = row["suburb"].lower().replace(" ", "-")
@@ -195,7 +189,22 @@ class DomainRentalSpider(scrapy.Spider):
             item["url"] = response.url
 
             # Add property features from listing card
-            item["property_features"] = response.meta.get("property_features", "")
+            property_features_data = response.meta.get("property_features", {})
+            if isinstance(property_features_data, dict):
+                item["property_features"] = property_features_data.get(
+                    "property_features", ""
+                )
+                item["bedrooms"] = property_features_data.get("bedrooms", "")
+                item["bathrooms"] = property_features_data.get("bathrooms", "")
+                item["car_spaces"] = property_features_data.get("car_spaces", "")
+                item["land_area"] = property_features_data.get("land_area", "")
+            else:
+                # Legacy format - just store as property_features
+                item["property_features"] = property_features_data
+                item["bedrooms"] = ""
+                item["bathrooms"] = ""
+                item["car_spaces"] = ""
+                item["land_area"] = ""
 
             # Extract detailed info from the listing page
             self._extract_listing_page_data(item, response, listing_index)
@@ -472,13 +481,65 @@ class DomainRentalSpider(scrapy.Spider):
                         'span[data-testid="property-features-text-container"]::text'
                     ).getall()
 
-                return ",".join(feature_spans)
+                    # Join features and parse into individual components
+                    features_string = ",".join(feature_spans)
+                    return self._parse_property_features(features_string)
 
-            else:
-                return ""
+            return {
+                "property_features": "",
+                "bedrooms": "",
+                "bathrooms": "",
+                "car_spaces": "",
+                "land_area": "",
+            }
 
         except Exception as e:
-            return ""
+            return {
+                "property_features": "",
+                "bedrooms": "",
+                "bathrooms": "",
+                "car_spaces": "",
+                "land_area": "",
+            }
+
+    def _parse_property_features(self, features_string):
+        """Parse comma-separated property features into individual components"""
+        try:
+            # Split by comma and clean up
+            features = [f.strip() for f in features_string.split(",")]
+
+            # Initialize result
+            result = {
+                "property_features": features_string,
+                "bedrooms": "",
+                "bathrooms": "",
+                "car_spaces": "",
+                "land_area": "",
+            }
+
+            # Parse features based on typical order: bedrooms, bathrooms, car spaces, land area
+            if len(features) >= 1 and features[0] and features[0] != "−":
+                result["bedrooms"] = features[0]
+
+            if len(features) >= 2 and features[1] and features[1] != "−":
+                result["bathrooms"] = features[1]
+
+            if len(features) >= 3 and features[2] and features[2] != "−":
+                result["car_spaces"] = features[2]
+
+            if len(features) >= 4 and features[3] and features[3] != "−":
+                result["land_area"] = features[3]
+
+            return result
+
+        except Exception as e:
+            return {
+                "property_features": features_string,
+                "bedrooms": "",
+                "bathrooms": "",
+                "car_spaces": "",
+                "land_area": "",
+            }
 
     def parse(self, response):
         """
@@ -587,7 +648,7 @@ class DomainRentalSpider(scrapy.Spider):
             # Extract information from each listing
             for i, li in enumerate(listing_items):
                 # Extract property features from listing card
-                property_features = self._extract_listing_card_features(li)
+                property_features_data = self._extract_listing_card_features(li)
 
                 # Extract the listing link
                 listing_link = (
@@ -611,7 +672,7 @@ class DomainRentalSpider(scrapy.Spider):
                             "postcode": postcode,
                             "page_number": page_number,
                             "listing_index": i + 1,
-                            "property_features": property_features,
+                            "property_features": property_features_data,
                         },
                         headers={
                             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
