@@ -10,6 +10,8 @@ import warnings
 import geopandas as gpd
 from shapely.geometry import Point
 from typing import List, Optional, Union
+from shapely.geometry import Polygon
+
 
 # Load environment variables from .env file
 try:
@@ -40,7 +42,7 @@ class GeoUtils:
                                         If None, will try to load from ORS_API_KEY environment variable.
         """
         self.geocoding_delay = geocoding_delay
-        self.ors_api_key = ors_api_key or os.getenv("ORS_API_KEY")
+        self.ors_api_key = ors_api_key or os.getenv("ORS_API_KEY1")
         self.ors_client = None
 
         # Initialize OpenRouteService client if API key is available
@@ -366,3 +368,122 @@ class GeoUtils:
         # Combine street number and street name
         street_name = " ".join(word.title() for word in street_name_words)
         return f"{street_number} {street_name}"
+
+    def get_isochrone(
+        self,
+        coordinate,
+        profile="driving-car",
+        range_values=[300, 600, 900],
+        validate=False,
+        max_retries=5,
+        base_delay=1.0,
+    ):
+        """
+        Get isochrones for a single coordinate with multiple profiles and rate limiting.
+
+        Args:
+            coordinate (Point): Geometry Point object
+            profiles (list): List of transportation profiles (default: ['driving-car', 'foot-walking'])
+            range_values (list): List of time/distance values in seconds (default: [300, 600, 900])
+            validate (bool): Whether to validate coordinates (default: False)
+            attributes (list): List of attributes to request (default: None)
+            max_retries (int): Maximum number of retry attempts
+            base_delay (float): Base delay in seconds for exponential backoff
+
+        Returns:
+            dict: Dictionary with profile names as keys and isochrone results as values
+        """
+
+        print(
+            f"Getting {profile} isochrone for coordinate: {coordinate.y, coordinate.x}"
+        )
+
+        for attempt in range(max_retries + 1):
+            try:
+                # Prepare the request parameters
+                request_params = {
+                    "locations": [
+                        [coordinate.y, coordinate.x]
+                    ],  # Single coordinate as required by API
+                    "profile": profile,
+                    "range": range_values,
+                    "validate": validate,
+                }
+
+                # Make the isochrone request
+                isochrone_result = self.ors_client.isochrones(**request_params)
+
+                print(isochrone_result)
+
+                # get the polygon for each range value
+                results = []
+                for feature in isochrone_result["features"]:
+                    results.append(Polygon(feature["geometry"]["coordinates"][0]))
+
+                print(f"Successfully generated {profile} isochrone")
+                break
+
+            except Exception as e:
+                error_str = str(e).lower()
+
+                # Check for quota/quota exceeded errors - return None immediately
+                if any(
+                    quota_error in error_str
+                    for quota_error in [
+                        "quota",
+                        "quota exceeded",
+                        "rate limit exceeded",
+                        "limit exceeded",
+                    ]
+                ):
+                    print(
+                        f"Quota exceeded for OpenRouteService. Skipping {profile} isochrone request."
+                    )
+                    results = None
+                    break
+
+                if attempt < max_retries:
+                    # Calculate delay with exponential backoff and jitter
+                    delay = base_delay * (2**attempt) + random.uniform(0, 1)
+                    print(f"Attempt {attempt + 1} failed for {profile} isochrone: {e}")
+                    print(f"Retrying in {delay:.2f} seconds...")
+                    time.sleep(delay)
+                else:
+                    print(
+                        f"Error getting {profile} isochrone after {max_retries + 1} attempts: {e}"
+                    )
+                    results = None
+
+        print(f"Results: {results}")
+
+        return results
+
+    def get_isochrone_with_delay(
+        self,
+        coordinate,
+        profile="driving-car",
+        range_values=[300, 600, 900],
+        validate=False,
+    ):
+        """
+        Wrapper function that adds a small delay between API calls for isochrone requests.
+
+        Args:
+            coordinate (list or tuple): Single coordinate as [lon, lat] or (lon, lat)
+            profiles (list): List of transportation profiles
+            range_values (list): List of time/distance values in seconds
+            validate (bool): Whether to validate coordinates
+            attributes (list): List of attributes to request
+
+        Returns:
+            dict: Dictionary with profile names as keys and isochrone results as values
+        """
+        result = self.get_isochrone(
+            coordinate=coordinate,
+            profile=profile,
+            range_values=range_values,
+            validate=validate,
+        )
+        # Add a small random delay (0.1-0.5 seconds) between calls
+        time.sleep(random.uniform(0.1, 0.5))
+        return result
