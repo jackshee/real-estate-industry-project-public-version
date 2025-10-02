@@ -46,3 +46,6 @@ pyspark>=3.5.0
 
 # bs4 for HTML parsing
 bs4>=0.0.1
+
+# utils for various utility functions
+utils>=1.0.1
