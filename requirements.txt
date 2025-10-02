@@ -49,6 +49,3 @@ bs4>=0.0.1
 
 # utils for various utility functions
 utils>=1.0.1
-
-# utils.geo for geographical calculations
-utils.geo>=1.0.1
