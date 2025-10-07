@@ -280,7 +280,7 @@ Examples:
 
     parser.add_argument(
         "--output-dir",
-        default="../data/processed/routes/ptv",
+        default="data/processed/routes/ptv",
         help="Output directory for results (default: ../data/processed/routes/ptv)",
     )
 
