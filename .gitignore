@@ -155,6 +155,9 @@ httpcache/
 /geovisualization/VMADMIN
 /geovisualization/32350DS0005_2001-24.xlsx
 
+# Model Optimisation files
+/models
+
 # Log files
 *.log
 logs/
