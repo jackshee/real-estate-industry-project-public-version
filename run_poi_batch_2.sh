@@ -8,8 +8,8 @@ LOG_FILE="poi_batch_processing_part2.log"
 echo "Starting POI batch processing Part 2 (4500-7000) at $(date)" | tee -a "$LOG_FILE"
 
 # Activate virtual environment
-echo "Activating virtual environment..." | tee -a "$LOG_FILE"
-source venv/bin/activate
+#echo "Activating virtual environment..." | tee -a "$LOG_FILE"
+#source /opt/anaconda3/envs/pyspark-env/bin/activate
 
 # Check if virtual environment is activated
 if [[ "$VIRTUAL_ENV" != "" ]]; then
