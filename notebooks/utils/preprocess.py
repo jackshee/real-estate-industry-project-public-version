@@ -1,6 +1,10 @@
 import pandas as pd
 import pickle
 import os
+import numpy as np
+import glob
+from pathlib import Path
+from shapely.geometry import Point
 
 
 class PreprocessUtils:
@@ -278,3 +282,244 @@ class PreprocessUtils:
                 result.loc[mask] = fill_value
 
         return result
+
+    def split_into_batches(self, df, batch_size, output_dir):
+        """
+        Split a DataFrame into smaller CSV files with specified batch size.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            DataFrame to split into batches
+        batch_size : int
+            Number of rows per batch file
+        output_dir : str
+            Directory path where batch files will be saved
+
+        Returns:
+        --------
+        list
+            List of file paths for the saved batch files
+        """
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Calculate number of batches needed
+        num_batches = (len(df) + batch_size - 1) // batch_size
+
+        # List to store file paths
+        batch_files = []
+
+        # Split and save batches
+        for i in range(num_batches):
+            start_idx = i * batch_size
+            end_idx = min((i + 1) * batch_size, len(df))
+            batch_df = df.iloc[start_idx:end_idx]
+
+            # Create filename with batch number
+            filename = f"batch_{i+1:04d}.csv"
+            filepath = os.path.join(output_dir, filename)
+
+            # Save batch to CSV
+            batch_df.to_csv(filepath, index=False)
+            batch_files.append(filepath)
+
+            print(f"Saved {filename}: {len(batch_df)} rows")
+
+        print(f"\nTotal batches created: {num_batches}")
+        print(f"Output directory: {output_dir}")
+
+        return batch_files
+
+    def impute_by_nearest_point(
+        self, df, column_names, coordinates_column="coordinates", suburb_column="suburb"
+    ):
+        """
+        Impute missing values in one or more columns by finding the nearest non-null point within the same suburb.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            DataFrame containing the data
+        column_names : str or list of str
+            Name(s) of the column(s) to impute (e.g., 'driving_5min' or ['driving_5min', 'walking_5min'])
+        coordinates_column : str, optional
+            Name of the column containing Shapely Point objects (default: 'coordinates')
+        suburb_column : str, optional
+            Name of the suburb column (default: 'suburb')
+
+        Returns:
+        --------
+        pd.Series or pd.DataFrame
+            Series with imputed values if single column, DataFrame if multiple columns
+        """
+        # Convert single column name to list for uniform processing
+        if isinstance(column_names, str):
+            column_names = [column_names]
+            return_series = True
+        else:
+            return_series = False
+
+        # Create copies of the columns to avoid modifying the original
+        results = {}
+        for col in column_names:
+            results[col] = df[col].copy()
+
+        # Find rows where ANY of the columns have null values
+        any_null_mask = pd.Series(False, index=df.index)
+        for col in column_names:
+            any_null_mask |= results[col].isna()
+
+        null_indices = df[any_null_mask].index
+
+        print(f"Imputing null values in {len(column_names)} column(s): {column_names}")
+        print(f"Total rows with null values to impute: {len(null_indices)}")
+
+        # Counter for tracking imputation
+        imputed_count = 0
+        not_imputed_count = 0
+
+        # Iterate through each row with null value
+        for idx in null_indices:
+            # Check if any column needs imputation for this row
+            needs_imputation = any(
+                results[col].loc[idx] is pd.NA or pd.isna(results[col].loc[idx])
+                for col in column_names
+            )
+
+            if not needs_imputation:
+                continue
+
+            # Get the suburb and coordinates of the current row
+            current_suburb = df.loc[idx, suburb_column]
+            current_coords = df.loc[idx, coordinates_column]
+
+            # Find rows in the same suburb that have at least one non-null value
+            same_suburb_mask = (df[suburb_column] == current_suburb) & (
+                df.index != idx
+            )  # Exclude current row
+
+            same_suburb_data = df[same_suburb_mask]
+
+            if len(same_suburb_data) > 0:
+                # Calculate distances to all points in the same suburb
+                distances = same_suburb_data[coordinates_column].apply(
+                    lambda point: current_coords.distance(point)
+                )
+
+                # Find the index of the nearest point
+                nearest_idx = distances.idxmin()
+
+                # Impute each column from the nearest point
+                for col in column_names:
+                    if pd.isna(results[col].loc[idx]):
+                        results[col].loc[idx] = results[col].loc[nearest_idx]
+
+                imputed_count += 1
+            else:
+                # Fallback: search globally if no data in same suburb
+                global_mask = df.index != idx
+                global_data = df[global_mask]
+
+                if len(global_data) > 0:
+                    # Calculate distances to all points globally
+                    distances = global_data[coordinates_column].apply(
+                        lambda point: current_coords.distance(point)
+                    )
+
+                    # Find the index of the nearest point
+                    nearest_idx = distances.idxmin()
+
+                    # Impute each column from the nearest point
+                    for col in column_names:
+                        if pd.isna(results[col].loc[idx]):
+                            results[col].loc[idx] = results[col].loc[nearest_idx]
+
+                    imputed_count += 1
+                else:
+                    # No data available anywhere
+                    not_imputed_count += 1
+
+        print(
+            f"Successfully imputed: {imputed_count} rows, Could not impute (no data available): {not_imputed_count}"
+        )
+
+        # Return Series if single column, DataFrame if multiple columns
+        if return_series:
+            return results[column_names[0]]
+        else:
+            return pd.DataFrame(results)
+
+    def merge_batches(self, input_dir, pattern="*.csv", verbose=True):
+        """
+        Merge multiple CSV files from a directory into a single DataFrame.
+
+        Parameters:
+        -----------
+        input_dir : str
+            Directory containing the CSV files to merge
+        pattern : str, optional
+            Glob pattern to match files (default: "*.csv")
+        verbose : bool, optional
+            Print detailed progress information (default: True)
+
+        Returns:
+        --------
+        pd.DataFrame
+            The merged/concatenated dataframe
+        """
+        input_dir = Path(input_dir)
+
+        if verbose:
+            print(f"Starting merge process...")
+            print(f"Input directory: {input_dir}")
+            print(f"File pattern: {pattern}")
+            print("-" * 60)
+
+        # Get all matching CSV files
+        file_pattern = str(input_dir / pattern)
+        csv_files = glob.glob(file_pattern)
+        csv_files.sort()  # Sort to ensure consistent order
+
+        if not csv_files:
+            raise ValueError(f"No files found matching pattern: {file_pattern}")
+
+        if verbose:
+            print(f"Found {len(csv_files)} files to merge:")
+            for file in csv_files:
+                print(f"  - {os.path.basename(file)}")
+            print()
+
+        # Read and concatenate all CSV files
+        dataframes = []
+        total_rows = 0
+
+        for file_path in csv_files:
+            try:
+                df = pd.read_csv(file_path)
+                dataframes.append(df)
+                total_rows += len(df)
+                if verbose:
+                    print(f"  Loaded: {os.path.basename(file_path)} ({len(df):,} rows)")
+            except Exception as e:
+                print(f"  ERROR loading {file_path}: {e}")
+                continue
+
+        if not dataframes:
+            raise ValueError("No dataframes loaded successfully!")
+
+        # Concatenate all dataframes
+        if verbose:
+            print(f"\nMerging {len(dataframes)} dataframes...")
+
+        merged_df = pd.concat(dataframes, ignore_index=True)
+
+        if verbose:
+            print(f"{'=' * 60}")
+            print(f"✓ Merge completed successfully!")
+            print(f"✓ Total rows: {len(merged_df):,}")
+            print(f"✓ Total columns: {len(merged_df.columns)}")
+            print(f"✓ Column names: {list(merged_df.columns)}")
+            print(f"{'=' * 60}")
+
+        return merged_df
