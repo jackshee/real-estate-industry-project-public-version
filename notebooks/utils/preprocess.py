@@ -394,15 +394,17 @@ class PreprocessUtils:
             current_suburb = df.loc[idx, suburb_column]
             current_coords = df.loc[idx, coordinates_column]
 
-            # Find rows in the same suburb that have at least one non-null value
-            same_suburb_mask = (df[suburb_column] == current_suburb) & (
-                df.index != idx
-            )  # Exclude current row
+            # Find rows in the same suburb (excluding current row)
+            same_suburb_mask = (df[suburb_column] == current_suburb) & (df.index != idx)
+
+            # Further filter to only include rows where ALL columns have non-null values
+            for col in column_names:
+                same_suburb_mask &= results[col].notna()
 
             same_suburb_data = df[same_suburb_mask]
 
             if len(same_suburb_data) > 0:
-                # Calculate distances to all points in the same suburb
+                # Calculate distances to all points in the same suburb with non-null values
                 distances = same_suburb_data[coordinates_column].apply(
                     lambda point: current_coords.distance(point)
                 )
@@ -419,10 +421,15 @@ class PreprocessUtils:
             else:
                 # Fallback: search globally if no data in same suburb
                 global_mask = df.index != idx
+
+                # Filter to only include rows where ALL columns have non-null values
+                for col in column_names:
+                    global_mask &= results[col].notna()
+
                 global_data = df[global_mask]
 
                 if len(global_data) > 0:
-                    # Calculate distances to all points globally
+                    # Calculate distances to all points globally with non-null values
                     distances = global_data[coordinates_column].apply(
                         lambda point: current_coords.distance(point)
                     )
@@ -437,7 +444,7 @@ class PreprocessUtils:
 
                     imputed_count += 1
                 else:
-                    # No data available anywhere
+                    # No data available anywhere with non-null values
                     not_imputed_count += 1
 
         print(
