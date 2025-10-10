@@ -35,9 +35,14 @@ This project scrapes rental property listings from Domain.com.au, extracting key
 
 ### 1. Set Up Virtual Environment
 
+This project uses a Python virtual environment to manage dependencies. Follow these steps to set up your environment:
+
 ```bash
-# Create a new virtual environment
-python -m venv venv
+# Navigate to the project directory
+cd "/Users/jackshee/University/MAST30034 Applied Data Science/project2"
+
+# Create a new virtual environment (if not already created)
+python3 -m venv venv
 
 # Activate the virtual environment
 # On macOS/Linux:
@@ -45,8 +50,18 @@ source venv/bin/activate
 # On Windows:
 # venv\Scripts\activate
 
-# Install dependencies
+# Upgrade pip to the latest version
+pip install --upgrade pip
+
+# Install all project dependencies
 pip install -r requirements.txt
+```
+
+**Note**: The virtual environment must be activated every time you start a new terminal session. You'll know it's activated when you see `(venv)` at the beginning of your terminal prompt.
+
+To deactivate the virtual environment when you're done:
+```bash
+deactivate
 ```
 
 ### 2. Run the Custom Scraper
@@ -150,6 +165,20 @@ Each property listing contains:
 - **Scalability**: Can handle 50+ pages efficiently
 
 ## 🔧 Configuration
+
+### Maintaining Dependencies
+
+If you install new packages during development, make sure to update the `requirements.txt` file:
+
+```bash
+# Activate the virtual environment first
+source venv/bin/activate
+
+# Update requirements.txt with all installed packages
+pip freeze > requirements.txt
+```
+
+This ensures that anyone else working on the project can install the exact same package versions.
 
 ### Rate Limiting
 Adjust scraping speed in the respective configuration files:
