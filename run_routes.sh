@@ -20,7 +20,7 @@ else
 fi
 
 # Create output directory if it doesn't exist
-OUTPUT_DIR="data/processed/routes_wayback"
+OUTPUT_DIR="data/processed/routes"
 mkdir -p "$OUTPUT_DIR"
 
 # Define POI file (adjust this path if needed)
@@ -36,11 +36,11 @@ fi
 echo "Using POI file: $POI_FILE" | tee -a "$LOG_FILE"
 
 # Initialize API key rotation
-api_key_num=1
+api_key_num=15
 execution_count=0
 
 # Process all batch files in missing_routes_wayback
-INPUT_DIR="data/raw/missing_routes_wayback"
+INPUT_DIR="data/raw/missing_routes"
 echo "Processing route files from $INPUT_DIR..." | tee -a "$LOG_FILE"
 
 # Get list of all batch CSV files
@@ -65,7 +65,7 @@ for csv_file in "${batch_files[@]}"; do
     echo "========================================" | tee -a "$LOG_FILE"
     echo "Processing file $current_file/$total_files: $csv_file" | tee -a "$LOG_FILE"
     echo "Batch: $batch_name" | tee -a "$LOG_FILE"
-    echo "Using APIKEY${api_key_num} (execution #$execution_count)" | tee -a "$LOG_FILE"
+    echo "Using ORS_API_KEY${api_key_num} (execution #$execution_count)" | tee -a "$LOG_FILE"
     echo "Started at: $(date)" | tee -a "$LOG_FILE"
     
     # Run the routes extraction script
@@ -75,7 +75,7 @@ for csv_file in "${batch_files[@]}"; do
         --output-dir "$OUTPUT_DIR" \
         --max-km 3.0 \
         --k-nearest 10 \
-        --api-key "APIKEY${api_key_num}" \
+        --api-key "ORS_API_KEY${api_key_num}" \
         2>&1 | tee -a "$LOG_FILE"
     
     # Check if the command was successful
@@ -90,7 +90,7 @@ for csv_file in "${batch_files[@]}"; do
     execution_count=$((execution_count + 1))
     api_key_num=$((api_key_num + 1))
     
-    echo "Completed execution #${execution_count}. Next API key will be APIKEY${api_key_num}" | tee -a "$LOG_FILE"
+    echo "Completed execution #${execution_count}. Next API key will be ORS_API_KEY${api_key_num}" | tee -a "$LOG_FILE"
     echo "----------------------------------------" | tee -a "$LOG_FILE"
     
     # Add a delay between files to be respectful to the API

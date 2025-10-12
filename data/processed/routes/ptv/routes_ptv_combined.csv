@@ -1,4 +1,4 @@
-property_id,coordinates,StationID,min_route_dist_m,min_route_dur_s
+property_id,coordinates,stationid,min_route_dist_m,min_route_dur_s
 17758724,POINT (144.6276339 -37.88353720000001),44395,152.63,21.98
 17758700,POINT (143.8731025 -37.55971359999999),48327,360.55,52.18
 17758698,POINT (144.9625034 -37.7474285),17315,495.46,68.67
