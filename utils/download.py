@@ -288,14 +288,6 @@ class DownloadUtils:
             print(f"Failed to scrape {data_name} data")
             return None
 
-    def download_rent_data(self, verbose=False):
-        """Download moving annual rent data from DFFH."""
-        directory = os.path.join(
-            self.base_data_dir, "landing", "rent", "rent_by_suburb"
-        )
-        url = "https://www.dffh.vic.gov.au/moving-annual-rents-suburb-march-quarter-2023-excel"
-        self.download_file(url, directory, "xlsx", verbose=verbose)
-
     def download_latest_rent_data(self, verbose=False):
         """Download the latest moving annual rent file (March 2025)."""
         filename = "moving_annual_median_weekly_rent_by_suburb"
@@ -554,11 +546,36 @@ class DownloadUtils:
         if verbose:
             end_time = time.time()
             download_time = end_time - start_time
-            print(f"\n✅ Downloaded {downloaded_count} files in {download_time:.2f}s")
-            print(f"❌ Failed downloads: {len(no_data)}")
+            total_files = sal_end - sal_start + 1
+            existing_files = total_files - downloaded_count - len(no_data)
+
+            print(f"\n=== POPULATION CENSUS DATA DOWNLOAD COMPLETE ===")
+            print(f"✅ Successfully downloaded: {downloaded_count} files")
+            print(f"📁 Files already existed: {existing_files} files")
+            print(f"❌ Failed downloads: {len(no_data)} files")
+            print(f"📊 Total files processed: {total_files} files")
+            print(f"⏱️  Total time: {download_time:.2f} seconds")
+            print(
+                f"📈 Success rate: {((downloaded_count + existing_files) / total_files * 100):.1f}%"
+            )
+
+            if no_data:
+                print(f"\n⚠️  SAL codes with no data available: {len(no_data)}")
+                if len(no_data) <= 10:
+                    print(f"   Missing SAL codes: {no_data}")
+                else:
+                    print(f"   First 10 missing SAL codes: {no_data[:10]}")
+                    print(f"   ... and {len(no_data) - 10} more")
         else:
-            print(f"\nDownloaded {downloaded_count} files")
-            print(f"Failed downloads: {len(no_data)}")
+            total_files = sal_end - sal_start + 1
+            existing_files = total_files - downloaded_count - len(no_data)
+            print(f"\n✅ Population census data download complete!")
+            print(f"   Downloaded: {downloaded_count} files")
+            print(f"   Already existed: {existing_files} files")
+            print(f"   Failed: {len(no_data)} files")
+            print(
+                f"   Success rate: {((downloaded_count + existing_files) / total_files * 100):.1f}%"
+            )
 
         return no_data
 

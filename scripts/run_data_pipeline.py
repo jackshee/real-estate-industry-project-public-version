@@ -27,6 +27,7 @@ sys.path.insert(0, str(project_root))
 from utils.download import DownloadUtils
 from utils.preprocess import PreprocessUtils
 from utils.geo import GeoUtils
+from utils.load import LoadUtils
 
 
 def run_download_pipeline(args: argparse.Namespace) -> None:
@@ -77,6 +78,23 @@ def run_geospatial_pipeline(args: argparse.Namespace) -> None:
     logging.info("Geospatial pipeline completed.")
 
 
+def run_data_loading_pipeline(args: argparse.Namespace) -> None:
+    """Run the data loading pipeline."""
+    logging.info("Starting data loading pipeline...")
+
+    # Initialize load utils
+    loader = LoadUtils(base_data_dir=args.data_dir)
+
+    # Add your data loading operations here
+    # Example:
+    # all_data = loader.load_all_landing_data()
+    # economic_data = loader.load_landing_economic_activity()
+    # schools_data = loader.load_landing_schools(year=2024)
+    # etc.
+
+    logging.info("Data loading pipeline completed.")
+
+
 def run_full_pipeline(args: argparse.Namespace) -> None:
     """Run the complete data pipeline."""
     logging.info("Starting full data pipeline...")
@@ -87,11 +105,14 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
         run_preprocessing_pipeline(args)
     elif args.geospatial_only:
         run_geospatial_pipeline(args)
+    elif args.load_only:
+        run_data_loading_pipeline(args)
     else:
         # Run all pipelines in sequence
         run_download_pipeline(args)
         run_preprocessing_pipeline(args)
         run_geospatial_pipeline(args)
+        run_data_loading_pipeline(args)
 
     logging.info("Full pipeline completed.")
 
@@ -123,6 +144,12 @@ def parse_args() -> argparse.Namespace:
         "--geospatial-only",
         action="store_true",
         help="Run only the geospatial operations pipeline",
+    )
+
+    parser.add_argument(
+        "--load-only",
+        action="store_true",
+        help="Run only the data loading pipeline",
     )
 
     parser.add_argument(
