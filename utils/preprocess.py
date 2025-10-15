@@ -971,3 +971,355 @@ class PreprocessUtils:
         self.merge_census_csv_files(base_data_dir)
 
         print("Census data processing completed!")
+
+    def parse_property_features(self, feature_string):
+        """
+        Parse property_features column to extract bedrooms, bathrooms, car_spaces, and land_area.
+
+        Format: 'bedrooms, ,bathrooms, ,car_spaces,' or 'bedrooms, ,bathrooms, ,car_spaces, ,XXXm²,'
+                or 'bedrooms, ,bathrooms, ,car_spaces, ,X.XXha,'
+        Missing values are represented by '−'
+        Land area can be in m² or ha (hectares are converted to m²: 1 ha = 10,000 m²)
+
+        Returns: pd.Series with four integer values (bedrooms, bathrooms, car_spaces, land_area)
+        """
+        # Split by ', ,'
+        parts = feature_string.split(", ,")
+
+        # Initialize values
+        bedrooms = None
+        bathrooms = None
+        car_spaces = None
+        land_area = None
+
+        # Extract bedrooms (index 0)
+        if len(parts) > 0:
+            val = parts[0].strip().rstrip(",")
+            # Check if this is just a land area value (like '12.51ha,')
+            if "ha" in val or "m²" in val:
+                # This entire string is just land area, extract it
+                if "ha" in val:
+                    land_area_str = val.replace("ha", "").replace(",", "").strip()
+                    if land_area_str and land_area_str != "−":
+                        land_area = int(
+                            float(land_area_str) * 10000
+                        )  # Convert ha to m²
+                elif "m²" in val:
+                    land_area_str = val.replace("m²", "").replace(",", "").strip()
+                    if land_area_str and land_area_str != "−":
+                        land_area = int(land_area_str)
+            else:
+                bedrooms = None if val == "−" or val == "" else int(val)
+
+        # Extract bathrooms (index 1)
+        if len(parts) > 1:
+            val = parts[1].strip().rstrip(",")
+            bathrooms = None if val == "−" or val == "" else int(val)
+
+        # Extract car_spaces (index 2)
+        if len(parts) > 2:
+            val = parts[2].strip().rstrip(",")
+            car_spaces = None if val == "−" or val == "" else int(val)
+
+        # Extract land_area (index 3, if present and not already extracted)
+        if land_area is None and len(parts) > 3:
+            val = parts[3].strip().rstrip(",")
+            if "ha" in val:
+                # Remove 'ha' and extract number (handle commas and decimals like '12.51ha')
+                land_area_str = val.replace("ha", "").replace(",", "").strip()
+                if land_area_str and land_area_str != "−":
+                    land_area = int(
+                        float(land_area_str) * 10000
+                    )  # Convert ha to m², then to int
+            elif "m²" in val:
+                # Remove 'm²' and extract number (handle commas in numbers like '5,030m²')
+                land_area_str = val.replace("m²", "").replace(",", "").strip()
+                if land_area_str and land_area_str != "−":
+                    land_area = int(land_area_str)
+
+        return pd.Series([bedrooms, bathrooms, car_spaces, land_area])
+
+    def preprocess_live_listings(self, df):
+        """
+        Preprocess live listings data from Domain website.
+
+        Args:
+            df: DataFrame with live listings data
+
+        Returns:
+            Preprocessed DataFrame
+        """
+        # Convert column names to lowercase with snake case
+        df.columns = df.columns.str.lower().str.replace(" ", "_")
+
+        # Remove rows where property_id is null
+        df = df[df["property_id"].notna()]
+
+        # Convert property_id to Int64
+        df["property_id"] = df["property_id"].astype("Int64")
+
+        # Remove rows where property_features is null
+        df = df[df["property_features"].notna()]
+
+        # Drop the bathrooms, bedrooms, car_spaces, land_area columns (will be recreated from property_features)
+        df = df.drop(
+            columns=["bathrooms", "bedrooms", "car_spaces", "land_area"],
+            errors="ignore",
+        )
+
+        # Drop rows with not permitted property_type
+        permitted_types = [
+            "house",
+            "new house & land",
+            "townhouse",
+            "villa",
+            "semi-detached",
+            "terrace",
+            "duplex",
+            "apartment / unit / flat",
+            "studio",
+            "new apartments / off the plan",
+            "penthouse",
+        ]
+
+        # Remove rows where description is null
+        df = df[df["description"].notna()]
+
+        df["property_type"] = df["property_type"].str.lower()
+        df = df[df["property_type"].isin(permitted_types)]
+
+        # Map property types
+        df["house_flat_other"] = self.map_property_type(df["property_type"])
+
+        # Map suburbs
+        df["suburb"] = self.map_suburb(df["suburb"])
+
+        # Remove suburbs with count less than 10
+        suburb_counts = df["suburb"].value_counts()
+        valid_suburbs = suburb_counts[suburb_counts > 10].index
+        df = df[df["suburb"].isin(valid_suburbs)]
+
+        # Parse property features
+        df[["bedrooms", "bathrooms", "car_spaces", "land_area"]] = df[
+            "property_features"
+        ].apply(self.parse_property_features)
+
+        # Convert to nullable integer type (Int64) to preserve NaNs while using integer type
+        df["bedrooms"] = df["bedrooms"].astype("Int64")
+        df["bathrooms"] = df["bathrooms"].astype("Int64")
+        df["car_spaces"] = df["car_spaces"].astype("Int64")
+        df["land_area"] = df["land_area"].astype("Int64")
+
+        # Drop land_area since mostly missing and difficult to fill
+        df = df.drop(columns=["land_area"])
+
+        # Impute missing values by property type mode
+        df["bedrooms"] = self.impute_by_property_type_mode(df, "bedrooms")
+        df["bathrooms"] = self.impute_by_property_type_mode(df, "bathrooms")
+        df["car_spaces"] = self.impute_by_property_type_mode(df, "car_spaces")
+
+        # Impute appointment_only
+        df["appointment_only"] = df["appointment_only"].fillna(
+            df["appointment_only"].mode()[0]
+        )
+
+        # Convert date columns to datetime
+        df["updated_date"] = pd.to_datetime(df["updated_date"], format="mixed")
+        df["first_listed_date"] = pd.to_datetime(
+            df["first_listed_date"], format="mixed"
+        )
+        df["last_sold_date"] = pd.to_datetime(df["last_sold_date"], format="mixed")
+
+        # Convert updated_date to year and quarter
+        df["year"] = df["updated_date"].dt.year
+        df["quarter"] = df["updated_date"].dt.quarter
+
+        # Extract weekly rent from rental_price column
+        df["rental_price"] = self.extract_rental_price(df["rental_price"])
+
+        # Drop rows with unknown frequencies
+        df = df[df["rental_price"].notna()]
+
+        return df
+
+    def preprocess_wayback_listings(self, df_list, geo_utils):
+        """
+        Preprocess wayback listings data from Domain website.
+
+        Args:
+            df_list: List of DataFrames with wayback listings data
+            geo_utils: GeoUtils instance for address extraction
+
+        Returns:
+            Preprocessed DataFrame
+        """
+        # Stack all dataframes together
+        df = pd.concat(df_list, ignore_index=True)
+
+        # Map suburbs
+        df["suburb"] = self.map_suburb(df["suburb"])
+
+        # Remove suburbs with count less than 10
+        suburb_counts = df["suburb"].value_counts()
+        valid_suburbs = suburb_counts[suburb_counts > 10].index
+        df = df[df["suburb"].isin(valid_suburbs)]
+
+        # Drop land_area column
+        df = df.drop(columns=["land_area"])
+
+        # Convert bedrooms, bathrooms, car_spaces to Int64
+        df["bedrooms"] = df["bedrooms"].astype("Int64")
+        df["bathrooms"] = df["bathrooms"].astype("Int64")
+        df["car_spaces"] = df["car_spaces"].astype("Int64")
+
+        # Impute missing values by property type mode
+        df["bedrooms"] = self.impute_by_property_type_mode(df, "bedrooms")
+        df["bathrooms"] = self.impute_by_property_type_mode(df, "bathrooms")
+        df["car_spaces"] = self.impute_by_property_type_mode(df, "car_spaces")
+
+        # Extract weekly rent from rental_price column
+        df["rental_price"] = self.extract_rental_price(df["rental_price"])
+
+        # Drop rows with unknown frequencies
+        df = df[df["rental_price"].notna()]
+
+        # Extract address from url
+        df["address"] = df["url"].apply(geo_utils.extract_address_from_url)
+
+        # Drop unnecessary columns
+        df = df.drop(
+            columns=[
+                "url",
+                "property_features",
+                "postcode",
+                "scraped_date",
+                "wayback_url",
+                "wayback_time",
+            ]
+        )
+
+        # Remove duplicates, keeping first occurrence (most recent)
+        df = df.sort_values(by=["year", "quarter"], ascending=False)
+        df = df.drop_duplicates(subset=["property_id"], keep="first")
+
+        # Drop remaining nulls
+        df = df.dropna()
+
+        return df
+
+    def combine_and_sample_listings(self, live_df, wayback_df, sample_ratio=0.5):
+        """
+        Combine live and wayback listings, then perform stratified sampling.
+
+        Args:
+            live_df: Preprocessed live listings DataFrame
+            wayback_df: Preprocessed wayback listings DataFrame
+            sample_ratio: Ratio for stratified sampling (default 0.5)
+
+        Returns:
+            Sampled combined DataFrame
+        """
+        # Ensure both dataframes have the same columns
+        common_columns = [
+            "property_id",
+            "rental_price",
+            "bedrooms",
+            "bathrooms",
+            "car_spaces",
+            "property_type",
+            "suburb",
+            "year",
+            "quarter",
+            "longitude",
+            "latitude",
+            "coordinates",
+        ]
+
+        live_df = live_df[common_columns]
+        wayback_df = wayback_df[common_columns]
+
+        # Combine dataframes
+        df = pd.concat([live_df, wayback_df])
+
+        # Sort by year, quarter descending and remove duplicates
+        df = df.sort_values(by=["year", "quarter"], ascending=False)
+        df = df.drop_duplicates(subset=["property_id"], keep="first")
+
+        # Convert property_id to Int64
+        df["property_id"] = df["property_id"].astype("Int64")
+
+        # Perform stratified sampling
+        import numpy as np
+
+        np.random.seed(42)
+
+        # Shuffle the dataframe randomly
+        df_shuffled = df.sample(frac=1, random_state=42).reset_index(drop=True)
+
+        # Create stratification groups based on property_type, suburb, and bedrooms
+        df_shuffled["strata"] = (
+            df_shuffled["property_type"].astype(str)
+            + "_"
+            + df_shuffled["suburb"].astype(str)
+            + "_"
+            + df_shuffled["bedrooms"].astype(str)
+        )
+
+        # Perform stratified sampling
+        df_sampled = df_shuffled.groupby("strata", group_keys=False).apply(
+            lambda x: x.sample(frac=sample_ratio, random_state=42) if len(x) > 1 else x
+        )
+
+        # Drop the temporary strata column
+        df_sampled = df_sampled.drop(columns=["strata"])
+
+        # Reset index
+        df_sampled = df_sampled.reset_index(drop=True)
+
+        return df_sampled
+
+    def remove_outliers(
+        self, df, column_name, lower_quantile=0.01, upper_quantile=0.99
+    ):
+        """
+        Remove outliers from a DataFrame column based on quantile thresholds.
+
+        Args:
+            df: DataFrame to process
+            column_name: Name of the column to remove outliers from
+            lower_quantile: Lower quantile threshold (default: 0.01)
+            upper_quantile: Upper quantile threshold (default: 0.99)
+
+        Returns:
+            DataFrame with outliers removed
+        """
+        # Calculate quantile thresholds
+        lower_threshold = df[column_name].quantile(lower_quantile)
+        upper_threshold = df[column_name].quantile(upper_quantile)
+
+        print(f"Removing outliers from {column_name}:")
+        print(
+            f"  Lower threshold ({lower_quantile*100}% quantile): {lower_threshold:.2f}"
+        )
+        print(
+            f"  Upper threshold ({upper_quantile*100}% quantile): {upper_threshold:.2f}"
+        )
+
+        # Count outliers before removal
+        outliers_before = (
+            (df[column_name] < lower_threshold) | (df[column_name] > upper_threshold)
+        ).sum()
+        print(
+            f"  Outliers to remove: {outliers_before:,} rows ({outliers_before/len(df)*100:.2f}%)"
+        )
+
+        # Remove outliers
+        df_clean = df[
+            (df[column_name] >= lower_threshold) & (df[column_name] <= upper_threshold)
+        ].copy()
+
+        print(f"  Dataset shape before: {df.shape}")
+        print(f"  Dataset shape after: {df_clean.shape}")
+        print(f"  Rows removed: {df.shape[0] - df_clean.shape[0]:,}")
+
+        return df_clean

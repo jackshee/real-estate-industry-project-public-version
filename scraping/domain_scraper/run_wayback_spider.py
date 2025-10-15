@@ -97,7 +97,7 @@ def run_spider_for_quarter(quarter_col, df):
 
     # Create output filename
     filename = get_quarter_filename(quarter_col)
-    output_path = f"../../data/raw/domain/{filename}"
+    output_path = f"../../data/landing/domain/wayback/{filename}"
 
     print(f"📁 Output file: {output_path}")
 
@@ -281,7 +281,7 @@ def main():
         for result in failed_quarters:
             print(f"  - {result['quarter']}")
 
-    print(f"\n📁 Output files saved to: ../../data/raw/domain/")
+    print(f"\n📁 Output files saved to: ../../data/landing/domain/wayback/")
     print("✅ Quarterly scraping completed!")
 
 

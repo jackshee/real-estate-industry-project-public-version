@@ -171,30 +171,7 @@ class LoadUtils:
             raise
         except Exception as e:
             self.logger.error(f"Error loading PTV stops {file_path}: {e}")
-            raise
-
-    def load_landing_ptv_lines(self) -> pd.DataFrame:
-        """Load PTV lines data from landing directory (GeoJSON format)."""
-        file_path = (
-            self.base_data_dir / "landing" / "ptv" / "public_transport_lines.geojson"
-        )
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        try:
-            import geopandas as gpd
-
-            gdf = gpd.read_file(file_path)
-            self.logger.info(
-                f"Successfully loaded PTV lines: {file_path} ({len(gdf)} rows)"
-            )
-            return gdf
-        except ImportError:
-            self.logger.error("geopandas is required to load GeoJSON files")
-            raise
-        except Exception as e:
-            self.logger.error(f"Error loading PTV lines {file_path}: {e}")
-            raise
+            rais
 
     def load_landing_rent_data(self) -> pd.DataFrame:
         """
@@ -381,3 +358,89 @@ class LoadUtils:
             f"Successfully loaded {len(data)} population files from {pop_dir}"
         )
         return data
+
+    def merge_batches(
+        self, input_dir: Union[str, Path], pattern: str = "*.csv", verbose: bool = True
+    ) -> pd.DataFrame:
+        """
+        Merge multiple CSV files from a directory into a single DataFrame.
+
+        Parameters:
+        -----------
+        input_dir : Union[str, Path]
+            Directory containing the CSV files to merge
+        pattern : str, optional
+            Glob pattern to match files (default: "*.csv")
+        verbose : bool, optional
+            Print detailed progress information (default: True)
+
+        Returns:
+        --------
+        pd.DataFrame
+            The merged/concatenated dataframe
+        """
+        input_dir = Path(input_dir)
+
+        if verbose:
+            print(f"Starting merge process...")
+            print(f"Input directory: {input_dir}")
+            print(f"File pattern: {pattern}")
+            print("-" * 60)
+
+        # Get all matching CSV files
+        file_pattern = str(input_dir / pattern)
+        csv_files = glob.glob(file_pattern)
+        csv_files.sort()  # Sort to ensure consistent order
+
+        if not csv_files:
+            raise ValueError(f"No files found matching pattern: {file_pattern}")
+
+        if verbose:
+            print(f"Found {len(csv_files)} files to merge:")
+            for file in csv_files:
+                print(f"  - {os.path.basename(file)}")
+            print()
+
+        # Read and concatenate all CSV files
+        dataframes = []
+        total_rows = 0
+
+        for file_path in csv_files:
+            try:
+                df = pd.read_csv(file_path)
+                dataframes.append(df)
+                total_rows += len(df)
+                if verbose:
+                    print(f"  Loaded: {os.path.basename(file_path)} ({len(df):,} rows)")
+            except Exception as e:
+                print(f"  ERROR loading {file_path}: {e}")
+                continue
+
+        if not dataframes:
+            raise ValueError("No dataframes loaded successfully!")
+
+        # Concatenate all dataframes
+        if verbose:
+            print(f"\nMerging {len(dataframes)} dataframes...")
+
+        merged_df = pd.concat(dataframes, ignore_index=True)
+
+        if verbose:
+            print(f"{'=' * 60}")
+            print(f"✓ Merge completed successfully!")
+            print(f"✓ Total rows: {len(merged_df):,}")
+            print(f"✓ Total columns: {len(merged_df.columns)}")
+            print(f"✓ Column names: {list(merged_df.columns)}")
+            print(f"{'=' * 60}")
+
+        return merged_df
+
+    def load_geocoded_coordinates(self) -> pd.DataFrame:
+        """
+        Load geocoded coordinates for wayback listings by merging batch files.
+
+        Returns:
+            pd.DataFrame: Geocoded coordinates with property_id, latitude, longitude, and coordinates
+        """
+        coordinates_dir = self.base_data_dir / "processed" / "coordinates"
+        return self.merge_batches(coordinates_dir, pattern="batch_*.csv", verbose=True)

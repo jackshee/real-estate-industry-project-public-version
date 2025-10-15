@@ -16,6 +16,9 @@ Usage:
 import sys
 import argparse
 import logging
+import os
+import glob
+import pandas as pd
 from pathlib import Path
 from typing import Optional
 
@@ -52,12 +55,124 @@ def run_preprocessing_pipeline(args: argparse.Namespace) -> None:
 
     # Initialize preprocessing utils
     preprocessor = PreprocessUtils()
+    geo_utils = GeoUtils()
 
-    # Add your preprocessing steps here
-    # Example:
-    # preprocessor.clean_rental_listings()
-    # preprocessor.merge_datasets()
-    # etc.
+    # Process live listings
+    logging.info("Processing live listings...")
+    try:
+        df_live = pd.read_csv("data/raw/domain/rental_listings_2025_09.csv")
+        df_live_processed = preprocessor.preprocess_live_listings(df_live)
+        
+        # Select relevant columns
+        relevant_columns = [
+            'property_id','rental_price', 
+            'suburb', 'postcode', 'property_type', 'year', 'quarter',
+            'bedrooms', 'bathrooms', 'car_spaces',
+            'age_0_to_19', 'age_20_to_39', 'age_40_to_59', 'age_60_plus',
+            'agency_name', 'appointment_only', 'avg_days_on_market',
+            'description', 'family_percentage',
+            'first_listed_date',
+            'latitude', 'longitude', 'listing_status', 'long_term_resident', 
+            'median_rent_price', 'median_sold_price', 'number_sold',
+            'renter_percentage', 'single_percentage'
+        ]
+        
+        available_columns = [col for col in relevant_columns if col in df_live_processed.columns]
+        df_live_final = df_live_processed[available_columns].dropna()
+        
+        # Save processed live listings
+        os.makedirs("data/processed/domain", exist_ok=True)
+        df_live_final.to_csv("data/processed/domain/live_listings.csv", index=False)
+        logging.info(f"Processed live listings: {df_live_final.shape[0]} rows")
+        
+    except FileNotFoundError:
+        logging.warning("Live listings file not found, skipping live listings processing")
+        df_live_final = None
+
+    # Process wayback listings
+    logging.info("Processing wayback listings...")
+    try:
+        # Get all wayback CSV files
+        csv_files = glob.glob("data/raw/domain/rental_listings_*.csv")
+        csv_files = [f for f in csv_files if "rental_listings_2025_09.csv" not in f]
+        
+        if csv_files:
+            dataframes = []
+            for csv_file in sorted(csv_files):
+                filename = os.path.basename(csv_file)
+                parts = filename.replace('.csv', '').split('_')
+                year = parts[2]
+                month = parts[3]
+                
+                month_to_quarter = {'03': 1, '06': 2, '09': 3, '12': 4}
+                quarter = month_to_quarter.get(month, 'Unknown')
+                
+                df = pd.read_csv(csv_file)
+                df['year'] = int(year)
+                df['quarter'] = quarter
+                dataframes.append(df)
+            
+            # Preprocess wayback listings
+            df_wayback_processed = preprocessor.preprocess_wayback_listings(dataframes, geo_utils)
+            
+            # Save processed wayback listings
+            df_wayback_processed.to_csv("data/processed/domain/wayback_listings.csv", index=False)
+            logging.info(f"Processed wayback listings: {df_wayback_processed.shape[0]} rows")
+            
+            # Set up geocoding batches
+            os.makedirs("data/raw/missing_coordinates", exist_ok=True)
+            preprocessor.split_into_batches(
+                df_wayback_processed[['property_id', 'address']], 
+                1000, 
+                "data/raw/missing_coordinates"
+            )
+            logging.info("Created geocoding batches for wayback listings")
+            
+        else:
+            logging.warning("No wayback listing files found")
+            df_wayback_processed = None
+            
+    except Exception as e:
+        logging.error(f"Error processing wayback listings: {e}")
+        df_wayback_processed = None
+
+    # Combine datasets if both are available
+    if df_live_final is not None and df_wayback_processed is not None:
+        logging.info("Combining live and wayback listings...")
+        try:
+            # Check if geocoded coordinates exist
+            if os.path.exists("data/processed/coordinates/geocoded_wayback_listings.csv"):
+                df_coordinates = pd.read_csv("data/processed/coordinates/geocoded_wayback_listings.csv")
+                df_wayback_with_coords = df_wayback_processed.merge(df_coordinates, on='property_id', how='left')
+                df_wayback_with_coords = df_wayback_with_coords[df_wayback_with_coords['coordinates'].notna()]
+                df_wayback_with_coords = df_wayback_with_coords.drop(columns=['address'])
+                
+                # Prepare live listings
+                df_live_for_combine = df_live_final.copy()
+                if 'coordinates' in df_live_for_combine.columns:
+                    df_live_for_combine = df_live_for_combine.drop(columns=['coordinates'])
+                
+                from shapely.geometry import Point
+                df_live_for_combine['coordinates'] = df_live_for_combine.apply(
+                    lambda row: Point(row['latitude'], row['longitude']), axis=1
+                )
+                
+                # Combine and sample
+                df_combined = preprocessor.combine_and_sample_listings(
+                    df_live_for_combine, 
+                    df_wayback_with_coords, 
+                    sample_ratio=0.5
+                )
+                
+                # Save combined dataset
+                df_combined.to_csv("data/processed/domain/cleaned_listings_sampled.csv", index=False)
+                logging.info(f"Combined and sampled dataset: {df_combined.shape[0]} rows")
+                
+            else:
+                logging.warning("Geocoded coordinates not found, skipping dataset combination")
+                
+        except Exception as e:
+            logging.error(f"Error combining datasets: {e}")
 
     logging.info("Preprocessing pipeline completed.")
 

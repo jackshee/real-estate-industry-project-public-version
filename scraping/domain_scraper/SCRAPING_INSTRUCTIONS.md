@@ -8,35 +8,41 @@ This directory contains a Scrapy spider for scraping rental property listings fr
 
 1. **Test the spider first** (recommended):
    ```bash
-   cd dslc_documentation/domain_scraper
+   cd scraping/domain_scraper
    python test_spider.py
    ```
 
-2. **Run the full spider**:
+2. **Run live listings scraping**:
    ```bash
-   cd dslc_documentation/domain_scraper
+   cd scraping/domain_scraper
    python run_spider.py
    ```
    Or using the shell script:
    ```bash
-   cd dslc_documentation/domain_scraper
+   cd scraping/domain_scraper
    ./run_spider.sh
+   ```
+
+3. **Run wayback historical scraping** (2022-2025):
+   ```bash
+   cd scraping/domain_scraper
+   python run_wayback_spider.py
    ```
 
 ### Option 2: Using Scrapy directly
 
 1. **Test with limited pages**:
    ```bash
-   cd dslc_documentation/domain_scraper
+   cd scraping/domain_scraper
    source ../../venv/bin/activate
-   scrapy crawl domain_rental -o ../../data/raw/domain/test_rental_listings.csv -s CLOSESPIDER_PAGECOUNT=5
+   scrapy crawl domain_rental -o ../../data/landing/domain/live/test_rental_listings.csv -s CLOSESPIDER_PAGECOUNT=5
    ```
 
 2. **Run full scraping**:
    ```bash
-   cd dslc_documentation/domain_scraper
+   cd scraping/domain_scraper
    source ../../venv/bin/activate
-   scrapy crawl domain_rental -o ../../data/raw/domain/rental_listings_2025_09.csv
+   scrapy crawl domain_rental -o ../../data/landing/domain/live/rental_listings_2025_09.csv
    ```
 
 **Note**: The scripts automatically use the virtual environment, but if running Scrapy directly, you need to activate the virtual environment first with `source ../../venv/bin/activate`.
@@ -44,8 +50,9 @@ This directory contains a Scrapy spider for scraping rental property listings fr
 ## Output
 
 The spider will save results to:
-- **Test**: `data/raw/domain/test_rental_listings.csv`
-- **Full run**: `data/raw/domain/rental_listings_2025_09.csv`
+- **Live listings**: `data/landing/domain/live/rental_listings_2025_09.csv`
+- **Wayback listings**: `data/landing/domain/wayback/rental_listings_YYYY_MM.csv`
+- **Test**: `data/landing/domain/live/test_rental_listings.csv`
 
 ## Configuration
 

@@ -17,7 +17,7 @@ def main():
     os.chdir(script_dir)
 
     # Define the output file path (relative to project root)
-    output_file = "../../data/raw/domain/rental_listings_2025_09.csv"
+    output_file = "../../data/landing/domain/live/rental_listings_2025_09.csv"
 
     # Ensure the output directory exists
     output_path = Path(output_file)

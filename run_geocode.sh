@@ -6,7 +6,7 @@ OUTPUT_DIR="data/processed/coordinates"
 ADDRESS_COLUMN="address"
 
 # Counter for API keys
-api_key_counter=2
+api_key_counter=1
 
 # Loop through all CSV files in the input directory
 for input_file in "$INPUT_DIR"/*.csv; do
