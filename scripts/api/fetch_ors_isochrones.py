@@ -609,7 +609,7 @@ Examples:
 
     # Set output directory based on profile if not specified
     if not args.output_dir:
-        args.output_dir = f"data/processed/isochrones/{args.profile}"
+        args.output_dir = f"data/processed/isochrones_remaining/{args.profile}"
 
     # Set up logging
     logger = setup_logging()

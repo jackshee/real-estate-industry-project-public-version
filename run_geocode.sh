@@ -31,7 +31,7 @@ for input_file in "$INPUT_DIR"/*.csv; do
     echo "Processing $filename with $api_key..."
     
     # Run the Python script
-    python notebooks/api/fetch_coordinates.py \
+    python scripts/api/fetch_coordinates.py \
         --input-file "$input_file" \
         --api-key "$api_key" \
         --address-column "$ADDRESS_COLUMN"

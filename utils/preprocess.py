@@ -532,6 +532,324 @@ class PreprocessUtils:
 
         return merged_df
 
+    def excel_to_csv(self, file_path, selected_sheets, sal_code, suburb):
+        """
+        Creates flat CSVs for data stored in multisheet Excel documents.
+
+        Args:
+            file_path (str): Path to the Excel file
+            selected_sheets (list): List of sheet names to process
+            sal_code (str): SAL code for the suburb
+            suburb (str): Suburb name
+        """
+        # Create base output directory if it doesn't exist
+        base_output_dir = "../data/raw/census"
+        os.makedirs(base_output_dir, exist_ok=True)
+
+        for sheet in selected_sheets:
+            df = pd.read_excel(file_path, sheet_name=sheet, header=None)
+
+            if sheet == "G02":
+                # Left side table (col 0 = name, col 1 = value)
+                left = df[[0, 1]].dropna().rename(columns={0: "Statistic", 1: "Value"})
+
+                # Right side table (col 3 = name, col 4 = value)
+                right = df[[3, 4]].dropna().rename(columns={3: "Statistic", 4: "Value"})
+
+                # Combine both
+                g02_cleaned = pd.concat([left, right], ignore_index=True)
+                # add sheet identifier
+                g02_cleaned["Suburb"] = suburb
+
+                # save the csv if it doesn't already exist
+                output_dir = os.path.join(base_output_dir, "median_stats")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(output_dir, f"{sal_code}_median_stats.csv")
+                if not os.path.exists(output_path):
+                    g02_cleaned.to_csv(output_path, index=False)
+
+            elif sheet == "G04":
+                # Find where "Age (years):" appears → start of table
+                start_row = (
+                    df.index[
+                        df.iloc[:, 0].astype(str).str.contains("Age", na=False)
+                    ].tolist()[0]
+                    + 1
+                )
+
+                # Slice everything below that row
+                table = df.iloc[start_row:, :]
+
+                # Define the 3 blocks of columns (start_col, end_col)
+                blocks = [(0, 3), (5, 8), (10, 13)]
+
+                persons_dfs = []
+                for start, end in blocks:
+                    temp = table.iloc[:, start : end + 1].copy()
+                    temp.columns = ["Age group", "Males", "Females", "Persons"]
+
+                    # Drop rows where both Age group and Persons are empty
+                    temp = temp.dropna(subset=["Age group", "Persons"], how="any")
+
+                    # Keep only the relevant columns
+                    persons_dfs.append(temp[["Age group", "Persons"]])
+
+                # Combine all blocks vertically
+                persons_only = pd.concat(persons_dfs, ignore_index=True)
+
+                # Reset index
+                g04_cleaned = persons_only.reset_index(drop=True)
+
+                # add sheet identifier
+                g04_cleaned["Suburb"] = suburb
+                # save the csv if it doesn't already exist
+                output_dir = os.path.join(base_output_dir, "population_breakdown")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(
+                    output_dir, f"{sal_code}_population_breakdown.csv"
+                )
+                if not os.path.exists(output_path):
+                    g04_cleaned.to_csv(output_path, index=False)
+
+            elif sheet == "G17":
+                start_row = (
+                    df.index[
+                        df.iloc[:, 1].astype(str).str.contains("PERSONS", na=False)
+                    ].tolist()[0]
+                    + 1
+                )
+                end_row = (
+                    df.index[
+                        df.iloc[:, 0].astype(str).str.contains("This table", na=False)
+                    ].tolist()[0]
+                    - 1
+                )
+                # Slice everything between these rows
+                g17_cleaned = df.iloc[start_row + 1 : end_row, :]
+                g17_cleaned.columns = [
+                    "Price Range",
+                    "15-19",
+                    "20-24",
+                    "25-34",
+                    "35-44",
+                    "45-54",
+                    "55-64",
+                    "65-74",
+                    "75-84",
+                    "85+",
+                    "Total",
+                ]
+                # drop empty row
+                g17_cleaned = g17_cleaned.dropna(subset=["Price Range"])
+
+                # add suburb name
+                g17_cleaned["Suburb"] = suburb
+                # save the csv if it doesn't already exist
+                output_dir = os.path.join(base_output_dir, "personal_income")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(
+                    output_dir, f"{sal_code}_personal_income.csv"
+                )
+                if not os.path.exists(output_path):
+                    g17_cleaned.to_csv(output_path, index=False)
+
+            elif sheet == "G33":
+                start_row = (
+                    df.index[
+                        df.iloc[:, 0].astype(str).str.contains("Negative", na=False)
+                    ].tolist()[0]
+                    + 1
+                )
+                end_row = (
+                    df.index[
+                        df.iloc[:, 0].astype(str).str.contains("Total", na=False)
+                    ].tolist()[0]
+                    + 1
+                )
+
+                # Slice everything between these rows
+                g33_cleaned = df.iloc[start_row + 1 : end_row, :]
+                g33_cleaned.columns = [
+                    "Income",
+                    "Family Households",
+                    "Non-family Households",
+                    "Total",
+                ]
+
+                # drop empty rows
+                g33_cleaned = g33_cleaned.dropna(subset=["Income"])
+                # add suburb name
+                g33_cleaned["Suburb"] = suburb
+
+                # save the csv if it doesn't already exist
+                output_dir = os.path.join(base_output_dir, "household_income")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(
+                    output_dir, f"{sal_code}_household_income.csv"
+                )
+                if not os.path.exists(output_path):
+                    g33_cleaned.to_csv(output_path, index=False)
+
+            elif sheet == "G36":
+                # Find the start and end of the table
+                start_idx = df[
+                    df[0].str.contains("Occupied private dwellings", na=False)
+                ].index[0]
+                end_idx = df[
+                    df[0].str.contains("Total private dwellings", na=False)
+                ].index[0]
+
+                # Extract only the table rows
+                table_df = df.iloc[
+                    start_idx : end_idx + 1, :3
+                ]  # first 3 columns (Description, Dwellings, Persons)
+
+                # Set proper column names
+                table_df.columns = ["Dwelling Type", "Dwellings", "Persons"]
+
+                # Remove empty rows
+                table_df = table_df.dropna(subset=["Dwelling Type"])
+
+                # Drop "Occupied private dwellings:" header row
+                table_df = table_df.drop(
+                    table_df[
+                        table_df["Dwelling Type"] == "Occupied private dwellings:"
+                    ].index
+                ).reset_index(drop=True)
+
+                current_section = None
+                new_labels = []
+
+                # Define the "global totals" that should not be prefixed
+                global_totals = [
+                    "Total occupied private dwellings",
+                    "Unoccupied private dwellings",
+                    "Total private dwellings",
+                    "Dwelling structure not stated",
+                ]
+
+                for val in table_df["Dwelling Type"]:
+                    if pd.isna(val):
+                        new_labels.append(val)
+                    elif isinstance(val, str) and val.endswith(":"):
+                        # Section header
+                        current_section = val.replace(":", "")
+                        new_labels.append(None)
+                    elif val == "Total":
+                        # Totals inside a section
+                        new_labels.append(f"{current_section} - Total")
+                    elif val in global_totals:
+                        # Reset section for these
+                        current_section = None
+                        new_labels.append(val)
+                    else:
+                        # Normal row
+                        if current_section:
+                            new_labels.append(f"{current_section} - {val}")
+                        else:
+                            new_labels.append(val)
+
+                table_df["Dwelling Type"] = new_labels
+                g36_cleaned = table_df.dropna(subset=["Dwelling Type"]).reset_index(
+                    drop=True
+                )
+                g36_cleaned["Suburb"] = suburb
+
+                # save the csv if it doesn't already exist
+                output_dir = os.path.join(base_output_dir, "dwelling_structure")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(
+                    output_dir, f"{sal_code}_dwelling_structure.csv"
+                )
+                if not os.path.exists(output_path):
+                    g36_cleaned.to_csv(output_path, index=False)
+
+            elif sheet == "G49":
+                start_row = (
+                    df.index[
+                        df.iloc[:, 1].astype(str).str.contains("PERSONS", na=False)
+                    ].tolist()[0]
+                    + 1
+                )
+                end_row = (
+                    df.index[
+                        df.iloc[:, 0].astype(str).str.contains("This table", na=False)
+                    ].tolist()[0]
+                    - 1
+                )
+                # Slice everything between these rows
+                g49_cleaned = df.iloc[start_row + 1 : end_row, :]
+                g49_cleaned.columns = [
+                    "Highest Education Level",
+                    "15-24",
+                    "25-34",
+                    "35-44",
+                    "45-54",
+                    "55-64",
+                    "65-74",
+                    "75-84",
+                    "85+",
+                    "Total",
+                ]
+                # drop empty row
+                g49_cleaned = g49_cleaned.dropna(
+                    subset=["Highest Education Level"]
+                ).reset_index(drop=True)
+                # drop certificate header and total rows
+                g49_cleaned = g49_cleaned.drop([4, 8])
+
+                # add suburb name
+                g49_cleaned["Suburb"] = suburb
+
+                # save the csv if it doesn't already exist
+                output_dir = os.path.join(base_output_dir, "education_level")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(
+                    output_dir, f"{sal_code}_education_level.csv"
+                )
+                if not os.path.exists(output_path):
+                    g49_cleaned.to_csv(output_path, index=False)
+
+            elif sheet == "G60":
+                start_row = (
+                    df.index[
+                        df.iloc[:, 1].astype(str).str.contains("PERSONS", na=False)
+                    ].tolist()[0]
+                    + 1
+                )
+                end_row = (
+                    df.index[
+                        df.iloc[:, 0].astype(str).str.contains("This table", na=False)
+                    ].tolist()[0]
+                    - 1
+                )
+                # Slice everything between these rows
+                g60_cleaned = df.iloc[start_row + 1 : end_row, :]
+                g60_cleaned.columns = [
+                    "Age",
+                    "Managers",
+                    "Proffesionals",
+                    "Trades workers",
+                    "Community workers",
+                    "Administrative Workers",
+                    "Sales Workers",
+                    "Drivers",
+                    "Labourers",
+                    "Not Stated",
+                    "Total",
+                ]
+                # drop empty row
+                g60_cleaned = g60_cleaned.dropna(subset=["Age"]).reset_index(drop=True)
+
+                # add suburb name
+                g60_cleaned["Suburb"] = suburb
+                # save the csv if it doesn't already exist
+                output_dir = os.path.join(base_output_dir, "job_type")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(output_dir, f"{sal_code}_job_type.csv")
+                if not os.path.exists(output_path):
+                    g60_cleaned.to_csv(output_path, index=False)
+
     def extract_suburb_name(self, df):
         """
         Extract the suburb name from the localities excel spreadsheet.
@@ -853,52 +1171,46 @@ class PreprocessUtils:
 
     def process_all_census_data(
         self,
-        no_data_list=None,
-        sal_start=20001,
-        sal_end=22944,
         base_data_dir="../data/",
     ):
         """
         Process all downloaded census Excel files and convert them to CSV format.
 
         Args:
-            no_data_list (list): List of SAL codes that don't have data
-            sal_start (int): Starting SAL code (default: 20001)
-            sal_end (int): Ending SAL code (default: 22944)
             base_data_dir (str): Base data directory path
         """
         print("=== PROCESSING CENSUS DATA TO CSV ===")
-
-        if no_data_list is None:
-            no_data_list = []
 
         population_dir = os.path.join(base_data_dir, "landing", "population_by_suburb")
         selected_sheets = ["G02", "G04", "G17", "G33", "G36", "G49", "G60"]
 
         processed_count = 0
 
-        for i in range(sal_start, sal_end + 1):
-            if i not in no_data_list:
-                sal_code = f"SAL{i}"
-                file_path = os.path.join(population_dir, f"{sal_code}_population.xlsx")
+        # Get all Excel files in the population directory
+        excel_files = [f for f in os.listdir(population_dir) if f.endswith(".xlsx")]
+        excel_files.sort()  # Process in alphabetical order
 
-                if os.path.exists(file_path):
-                    try:
-                        # Retrieve the suburb name
-                        df = pd.read_excel(file_path, sheet_name="G02", header=None)
-                        suburb = self.extract_suburb_name(df)
+        print(f"Found {len(excel_files)} Excel files to process")
 
-                        # Process the Excel file to CSV
-                        self.process_census_excel_to_csv(
-                            file_path, selected_sheets, sal_code, suburb, base_data_dir
-                        )
-                        processed_count += 1
+        for file_name in excel_files:
+            file_path = os.path.join(population_dir, file_name)
+            try:
+                # Extract SAL code from filename (e.g., "SAL20001_population.xlsx" -> "SAL20001")
+                sal_code = file_name.replace("_population.xlsx", "")
 
-                        if processed_count % 100 == 0:
-                            print(f"Processed {processed_count} files...")
+                # Retrieve the suburb name
+                df = pd.read_excel(file_path, sheet_name="G02", header=None)
+                suburb = self.extract_suburb_name(df)
 
-                    except Exception as e:
-                        print(f"Error processing {sal_code}: {e}")
+                # Process the Excel file to CSV
+                self.excel_to_csv(file_path, selected_sheets, sal_code, suburb)
+                processed_count += 1
+
+                if processed_count % 100 == 0:
+                    print(f"Processed {processed_count} files...")
+
+            except Exception as e:
+                print(f"Error processing {file_name}: {e}")
 
         print(f"Successfully processed {processed_count} census files")
 
@@ -911,29 +1223,37 @@ class PreprocessUtils:
         """
         print("=== MERGING CENSUS CSV FILES ===")
 
-        population_dir = os.path.join(base_data_dir, "landing", "population_by_suburb")
-        landing_dir = os.path.join(base_data_dir, "landing")
+        population_dir = os.path.join(base_data_dir, "raw", "census")
 
-        # Define the file patterns and output names
-        file_patterns = {
-            "median_stats": "*_median_stats.csv",
-            "population_breakdown": "*_population_breakdown.csv",
-            "personal_income": "*_personal_income.csv",
-            "household_income": "*_household_income.csv",
-            "dwelling_structure": "*_dwelling_structure.csv",
-            "job_type": "*_job_type.csv",
-            "education_level": "*_education_level.csv",
+        processed_dir = os.path.join(base_data_dir, "processed", "census")
+
+        # Create processed directory if it doesn't exist
+        os.makedirs(processed_dir, exist_ok=True)
+
+        # Define the subdirectories and their corresponding dataset names
+        dataset_directories = {
+            "median_stats": "median_stats",
+            "population_breakdown": "population_breakdown",
+            "personal_income": "personal_income",
+            "household_income": "household_income",
+            "dwelling_structure": "dwelling_structure",
+            "job_type": "job_type",
+            "education_level": "education_level",
         }
 
-        for dataset_name, pattern in file_patterns.items():
-            all_files = glob.glob(os.path.join(population_dir, pattern))
+        for dataset_name, subdirectory in dataset_directories.items():
+            subdirectory_path = os.path.join(population_dir, subdirectory)
+            if os.path.exists(subdirectory_path):
+                all_files = glob.glob(os.path.join(subdirectory_path, "*.csv"))
+            else:
+                all_files = []
 
             if all_files:
                 try:
                     df = pd.concat(
                         (pd.read_csv(f) for f in all_files), ignore_index=True
                     )
-                    output_path = os.path.join(landing_dir, f"{dataset_name}.csv")
+                    output_path = os.path.join(processed_dir, f"{dataset_name}.csv")
 
                     if not os.path.exists(output_path):
                         df.to_csv(output_path, index=False)
@@ -944,28 +1264,22 @@ class PreprocessUtils:
                 except Exception as e:
                     print(f"❌ Error merging {dataset_name}: {e}")
             else:
-                print(f"⚠️  No files found for pattern: {pattern}")
+                print(f"⚠️  No files found in subdirectory: {subdirectory}")
 
     def process_census_data_workflow(
         self,
-        no_data_list=None,
-        sal_start=20001,
-        sal_end=22944,
         base_data_dir="../data/",
     ):
         """
         Complete workflow to process census data from Excel files to consolidated CSV files.
 
         Args:
-            no_data_list (list): List of SAL codes that don't have data
-            sal_start (int): Starting SAL code (default: 20001)
-            sal_end (int): Ending SAL code (default: 22944)
             base_data_dir (str): Base data directory path
         """
         print("Starting complete census data processing workflow...")
 
         # Step 1: Process Excel files to CSV
-        self.process_all_census_data(no_data_list, sal_start, sal_end, base_data_dir)
+        self.process_all_census_data(base_data_dir)
 
         # Step 2: Merge CSV files
         self.merge_census_csv_files(base_data_dir)
@@ -1323,3 +1637,192 @@ class PreprocessUtils:
         print(f"  Rows removed: {df.shape[0] - df_clean.shape[0]:,}")
 
         return df_clean
+
+    def process_moving_annual_rent_excel_file(self, file_path):
+        """
+        Process a single Excel file and extract median rent data from moving annual rent files.
+
+        Args:
+            file_path (str): Path to the Excel file
+
+        Returns:
+            pd.DataFrame: Processed data with columns: suburb, property_type, quarter, year, median_rent
+        """
+        # Read all sheets from the Excel file
+        all_sheets = pd.read_excel(file_path, sheet_name=None, header=None)
+
+        # Property types we want to process (excluding 'All properties')
+        property_types = [
+            "1 bedroom flat",
+            "2 bedroom flat",
+            "3 bedroom flat",
+            "2 bedroom house",
+            "3 bedroom house",
+            "4 bedroom house",
+        ]
+
+        all_data = []
+
+        for sheet_name, df in all_sheets.items():
+            if sheet_name not in property_types:
+                continue
+
+            print(f"Processing {sheet_name} from {os.path.basename(file_path)}")
+
+            # Find the data start row (where suburbs begin)
+            # Look for the first non-null value in the first column that's not a header
+            data_start_row = None
+            for i in range(len(df)):
+                if pd.notna(df.iloc[i, 0]) and df.iloc[i, 0] not in [
+                    "Moving annual median rent by suburb",
+                    "1 bedroom flat",
+                    "2 bedroom flat",
+                    "3 bedroom flat",
+                    "2 bedroom house",
+                    "3 bedroom house",
+                    "4 bedroom house",
+                ]:
+                    data_start_row = i
+                    break
+
+            if data_start_row is None:
+                print(f"Warning: Could not find data start row for {sheet_name}")
+                continue
+
+            # Extract suburb names (second column, starting from data_start_row)
+            # Filter out NaN values and Group Total rows
+            suburb_series = df.iloc[data_start_row:, 1].dropna()
+            suburbs = suburb_series[
+                ~suburb_series.str.contains("Group Total", case=False, na=False)
+            ].tolist()
+
+            # Lowercase all suburbs
+            suburbs = [suburb.lower() for suburb in suburbs]
+
+            # Process each quarter/year combination
+            # The pattern is: every 2 columns starting from column 2
+            # Column 2: Mar 2000, Column 4: Jun 2000, Column 6: Sep 2000, Column 8: Dec 2000, etc.
+
+            col_idx = 2  # Start from column 2
+            while col_idx < df.shape[1]:
+                # Check if this column has a quarter/year header
+                quarter_year = df.iloc[1, col_idx]  # Row 1 contains quarter/year
+
+                if (
+                    pd.isna(quarter_year)
+                    or "Count" in str(quarter_year)
+                    or "Median" in str(quarter_year)
+                ):
+                    col_idx += 1
+                    continue
+
+                # The median data is in the next column (col_idx + 1)
+                median_col = col_idx + 1
+
+                if median_col >= df.shape[1]:
+                    break
+
+                # Parse quarter and year
+                try:
+                    quarter, year = str(quarter_year).split()
+                    year = int(year)
+                except:
+                    col_idx += 2
+                    continue
+
+                # convert quarter from month name to quarter number
+                quarter = {
+                    "Jan": 1,
+                    "Feb": 1,
+                    "Mar": 1,
+                    "Apr": 2,
+                    "May": 2,
+                    "Jun": 2,
+                    "Jul": 3,
+                    "Aug": 3,
+                    "Sep": 3,
+                    "Oct": 4,
+                    "Nov": 4,
+                    "Dec": 4,
+                }[quarter]
+
+                # Extract median values for this quarter/year
+                # We need to get the values from column 1 (suburbs) and the corresponding median values
+                suburb_data = df.iloc[data_start_row:, [1, median_col]].dropna(
+                    subset=[1]
+                )
+
+                # Filter out Group Total rows and create mapping
+                suburb_median_map = {}
+                for idx, row in suburb_data.iterrows():
+                    suburb_name = str(row.iloc[0]).lower()
+                    median_value = row.iloc[1]
+
+                    # Skip Group Total rows
+                    if "group total" in suburb_name:
+                        continue
+
+                    # Store the mapping
+                    suburb_median_map[suburb_name] = median_value
+
+                # Create data for this quarter/year using the filtered suburbs
+                for suburb in suburbs:
+                    if suburb in suburb_median_map:
+                        median_value = suburb_median_map[suburb]
+                        if pd.notna(median_value) and median_value != "-":
+                            try:
+                                median_rent = float(median_value)
+                                all_data.append(
+                                    {
+                                        "suburb": suburb,
+                                        "property_type": sheet_name,
+                                        "quarter": quarter,
+                                        "year": year,
+                                        "median_rent": median_rent,
+                                    }
+                                )
+                            except (ValueError, TypeError):
+                                # Skip invalid values
+                                continue
+
+                col_idx += 2  # Move to next quarter/year pair
+
+        return pd.DataFrame(all_data)
+
+    def process_moving_annual_rent_files(self, data_dir):
+        """
+        Process all moving annual rent Excel files in the specified directory.
+
+        Args:
+            data_dir (str): Directory containing moving annual rent Excel files
+
+        Returns:
+            pd.DataFrame: Combined data from all files
+        """
+        all_data = []
+
+        # Get all Excel files in the directory
+        excel_files = [f for f in os.listdir(data_dir) if f.endswith(".xlsx")]
+        excel_files.sort()  # Process in chronological order
+
+        print(f"Found {len(excel_files)} Excel files to process:")
+        for file in excel_files:
+            print(f"  - {file}")
+
+        for file in excel_files:
+            file_path = os.path.join(data_dir, file)
+            try:
+                file_data = self.process_moving_annual_rent_excel_file(file_path)
+                if not file_data.empty:
+                    all_data.append(file_data)
+                    print(f"Successfully processed {file}: {len(file_data)} records")
+                else:
+                    print(f"Warning: No data extracted from {file}")
+            except Exception as e:
+                print(f"Error processing {file}: {str(e)}")
+
+        if all_data:
+            combined_data = pd.concat(all_data, ignore_index=True)
+            return combined_data
+        else:
+            return pd.DataFrame()

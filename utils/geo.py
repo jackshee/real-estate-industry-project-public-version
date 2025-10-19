@@ -11,6 +11,7 @@ import geopandas as gpd
 from shapely.geometry import Point
 from typing import List, Optional, Union
 from shapely.geometry import Polygon
+from scipy.spatial import cKDTree
 
 
 # Load environment variables from .env file
@@ -30,6 +31,7 @@ class GeoUtils:
     - Geocoding addresses to coordinates
     - Spatial data transformations
     - Geographic data processing
+    - Spatial adjacency matrix creation
     """
 
     def __init__(self, geocoding_delay: float = 1.0, ors_api_key: Optional[str] = None):
@@ -44,6 +46,7 @@ class GeoUtils:
         self.geocoding_delay = geocoding_delay
         self.ors_api_key = ors_api_key or os.getenv("ORS_API_KEY1")
         self.ors_client = None
+        self.W = None  # Spatial connectivity matrix (row-normalized)
 
         # Initialize OpenRouteService client if API key is available
         if self.ors_api_key:
@@ -487,3 +490,240 @@ class GeoUtils:
         # Add a small random delay (0.1-0.5 seconds) between calls
         time.sleep(random.uniform(0.1, 0.5))
         return result
+
+    def create_spatial_adjacency_matrix(
+        self,
+        suburbs_gdf: gpd.GeoDataFrame,
+        k: int = 15,
+        connection_strength: float = 1.0,
+        eps: float = 0.0001,
+        target_crs: int = 3111,
+    ) -> pd.DataFrame:
+        """
+        Create spatial adjacency matrix based on k-nearest neighbors using distance weights.
+
+        Args:
+            suburbs_gdf (gpd.GeoDataFrame): GeoDataFrame containing suburb polygons
+            k (int): Number of nearest neighbors to consider (default: 15)
+            connection_strength (float): Base connection strength (default: 1.0)
+            eps (float): Small epsilon to avoid division by zero (default: 0.0001)
+            target_crs (int): Target CRS for distance calculations (default: 3111, VIC metric)
+
+        Returns:
+            pd.DataFrame: Spatial adjacency matrix with suburb names as index and columns
+        """
+        print(f"Creating spatial adjacency matrix with k={k} nearest neighbors...")
+
+        # 1) Load suburbs and project to a metric CRS (meters)
+        if suburbs_gdf.crs is None or suburbs_gdf.crs.is_geographic:
+            suburbs_gdf = suburbs_gdf.to_crs(target_crs)
+            print(f"Projected to CRS {target_crs} for distance calculations")
+
+        # 2) Use centroids for nearest-neighbor search
+        centroids = suburbs_gdf.geometry.centroid
+        coords = np.column_stack([centroids.x, centroids.y])
+
+        # 3) KDTree: get the nearest other suburb (k+1 to include self, then skip self)
+        tree = cKDTree(coords)
+        dists, idxs = tree.query(coords, k=k + 1)
+        nearest_idx = idxs[:, 1:]  # nearest other suburb index (skip self)
+        nearest_dist_m = dists[:, 1:]  # distance in meters to nearest other suburb
+
+        # 4) Build a nearest-suburb mapping
+        name_col = "LOCALITY"
+        suburb_names = suburbs_gdf[name_col].tolist()
+        nearest_suburbs_by_name = {
+            suburb_names[i]: list(
+                zip(
+                    [suburb_names[j] for j in idx_row],  # neighbor names
+                    dist_row,  # matching distances
+                )
+            )
+            for i, (idx_row, dist_row) in enumerate(zip(nearest_idx, nearest_dist_m))
+        }
+
+        # 5) Create adjacency matrix
+        suburbs_list = list(suburbs_gdf[name_col].values)
+        matrix = pd.DataFrame(0.0, index=suburbs_list, columns=suburbs_list)
+
+        for suburb, neighbours in nearest_suburbs_by_name.items():
+            for name, distance in neighbours:
+                if suburb == name or distance == 0:
+                    continue  # skip self matches
+                # Weight inversely proportional to distance (in km)
+                weight = connection_strength / ((distance / 1000) + eps)
+                matrix.loc[suburb, name] = weight
+                matrix.loc[name, suburb] = weight  # Make symmetric
+
+        print(f"Spatial adjacency matrix created: {matrix.shape}")
+        print(f"Non-zero connections: {np.count_nonzero(matrix)} / {matrix.size}")
+
+        return matrix
+
+    def create_spatial_connectivity_matrix(
+        self,
+        suburbs_gdf: gpd.GeoDataFrame,
+        panel_data_suburbs: List[str],
+        k: int = 15,
+        connection_strength: float = 1.0,
+        eps: float = 0.0001,
+        target_crs: int = 3111,
+    ) -> pd.DataFrame:
+        """
+        Create spatial connectivity matrix for panel data suburbs by mapping and aggregating
+        the base spatial adjacency matrix.
+
+        Args:
+            suburbs_gdf (gpd.GeoDataFrame): GeoDataFrame containing suburb polygons
+            panel_data_suburbs (List[str]): List of suburb names from panel data
+            k (int): Number of nearest neighbors to consider (default: 15)
+            connection_strength (float): Base connection strength (default: 1.0)
+            eps (float): Small epsilon to avoid division by zero (default: 0.0001)
+            target_crs (int): Target CRS for distance calculations (default: 3111)
+
+        Returns:
+            pd.DataFrame: Spatial connectivity matrix for panel data suburbs
+        """
+        print(
+            f"Creating spatial connectivity matrix for {len(panel_data_suburbs)} panel data suburbs..."
+        )
+
+        # Create base adjacency matrix
+        base_matrix = self.create_spatial_adjacency_matrix(
+            suburbs_gdf, k, connection_strength, eps, target_crs
+        )
+
+        # Create mapping from panel data suburbs to base matrix suburbs
+        base_suburbs = set(base_matrix.index)
+        panel_suburbs_set = set(panel_data_suburbs)
+
+        # Find overlap and create mapping
+        overlap = panel_suburbs_set & base_suburbs
+        unmerged_suburbs = panel_suburbs_set - base_suburbs
+
+        print(f"Direct overlap: {len(overlap)} suburbs")
+        print(f"Unmerged suburbs: {len(unmerged_suburbs)}")
+
+        # Create mapping for unmerged suburbs (split by hyphens)
+        mapping = {}
+        for suburb in unmerged_suburbs:
+            parts = suburb.split("-")
+            mapping[suburb] = parts
+
+        # Add direct mappings for overlapping suburbs
+        for suburb in overlap:
+            if suburb not in mapping:
+                mapping[suburb] = [suburb]
+
+        # Create new connectivity matrix for panel data suburbs
+        W_new = pd.DataFrame(
+            0.0, index=list(mapping.keys()), columns=list(mapping.keys())
+        )
+
+        for combo_i, parts_i in mapping.items():
+            for combo_j, parts_j in mapping.items():
+                try:
+                    # Extract submatrix and sum weights
+                    submatrix = base_matrix.loc[parts_i, parts_j]
+                    if not submatrix.empty:
+                        W_new.loc[combo_i, combo_j] = submatrix.values.sum()
+                    else:
+                        W_new.loc[combo_i, combo_j] = 0
+                except KeyError:
+                    # One or more suburbs missing in original matrix
+                    W_new.loc[combo_i, combo_j] = 0
+
+        print(f"Panel data connectivity matrix created: {W_new.shape}")
+        non_zero_count = np.count_nonzero(W_new)
+        total_elements = W_new.shape[0] * W_new.shape[1]
+        sparsity = 1 - (non_zero_count / total_elements)
+        print(f"Non-zero connections: {non_zero_count} / {total_elements}")
+        print(f"Matrix sparsity: {sparsity:.2%}")
+
+        return W_new
+
+    def create_row_normalized_spatial_matrix(
+        self, spatial_matrix: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Create row-normalized (row-stochastic) spatial connectivity matrix.
+        Each row sums to 1, making it suitable for spatial autoregressive models.
+
+        Args:
+            spatial_matrix (pd.DataFrame): Spatial connectivity matrix
+
+        Returns:
+            pd.DataFrame: Row-normalized spatial connectivity matrix
+        """
+        print("Creating row-normalized spatial connectivity matrix...")
+
+        # Calculate row totals
+        row_totals = spatial_matrix.sum(axis=1)
+
+        # Row normalize: divide each row by its sum (handle zero sums)
+        W_normalized = spatial_matrix.div(row_totals.replace(0, np.nan), axis=0).fillna(
+            0
+        )
+
+        # Verify normalization
+        norm_sums = W_normalized.sum(axis=1)
+        non_zero_rows = row_totals > 0
+        all_normalized = np.allclose(norm_sums[non_zero_rows], 1.0)
+
+        print(f"Row normalization successful: {all_normalized}")
+        print(f"Non-zero rows normalized: {non_zero_rows.sum()}")
+
+        return W_normalized
+
+    def build_spatial_connectivity_matrix(
+        self,
+        suburbs_gdf_path: str,
+        panel_data_suburbs: List[str],
+        k: int = 15,
+        connection_strength: float = 1.0,
+        eps: float = 0.0001,
+        target_crs: int = 3111,
+        normalize_rows: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Complete workflow to build spatial connectivity matrix from shapefile and panel data.
+
+        Args:
+            suburbs_gdf_path (str): Path to suburbs shapefile
+            panel_data_suburbs (List[str]): List of suburb names from panel data
+            k (int): Number of nearest neighbors to consider (default: 15)
+            connection_strength (float): Base connection strength (default: 1.0)
+            eps (float): Small epsilon to avoid division by zero (default: 0.0001)
+            target_crs (int): Target CRS for distance calculations (default: 3111)
+            normalize_rows (bool): Whether to row-normalize the matrix (default: True)
+
+        Returns:
+            pd.DataFrame: Spatial connectivity matrix (row-normalized if requested)
+        """
+        print("=" * 60)
+        print("BUILDING SPATIAL CONNECTIVITY MATRIX")
+        print("=" * 60)
+
+        # Load suburbs GeoDataFrame
+        suburbs_gdf = gpd.read_file(suburbs_gdf_path)
+        suburbs_gdf["LOCALITY"] = suburbs_gdf["LOCALITY"].apply(lambda x: x.lower())
+
+        # Create spatial connectivity matrix
+        W = self.create_spatial_connectivity_matrix(
+            suburbs_gdf, panel_data_suburbs, k, connection_strength, eps, target_crs
+        )
+
+        # Row normalize if requested
+        if normalize_rows:
+            W = self.create_row_normalized_spatial_matrix(W)
+
+        # Store as class attribute
+        self.W = W
+
+        print("=" * 60)
+        print("SPATIAL CONNECTIVITY MATRIX COMPLETE")
+        print("=" * 60)
+        print(f"Matrix shape: {W.shape}")
+        print(f"Available as self.W attribute")
+
+        return W

@@ -8,11 +8,10 @@
 source venv/bin/activate
 
 # Initialize counters
-api_key_num=10
+api_key_num=1
 execution_count=0
-
 # Get list of all missing_isochrones_*.csv files in the driving directory
-driving_dir="data/raw/missing_isochrones_wayback/driving"
+driving_dir="data/raw/missing_isochrones_remain/driving"
 files=($(ls ${driving_dir}/batch_*.csv | sort -V))
 
 echo "Found ${#files[@]} files to process in ${driving_dir}"
@@ -30,7 +29,7 @@ for file in "${files[@]}"; do
     echo "Processing ${filename} with APIKEY${api_key_num} (execution #$((execution_count + 1)))"
     
     # Run the Python script
-    python notebooks/api/fetch_ors_isochrones.py \
+    python scripts/api/fetch_ors_isochrones.py \
         --input-file "${file}" \
         --profile driving \
         --api-key "APIKEY${api_key_num}"

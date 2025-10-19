@@ -20,7 +20,7 @@ else
 fi
 
 # Create output directory if it doesn't exist
-OUTPUT_DIR="data/processed/routes"
+OUTPUT_DIR="data/processed/routes_remain"
 mkdir -p "$OUTPUT_DIR"
 
 # Define POI file (adjust this path if needed)
@@ -36,11 +36,11 @@ fi
 echo "Using POI file: $POI_FILE" | tee -a "$LOG_FILE"
 
 # Initialize API key rotation
-api_key_num=15
+api_key_num=1
 execution_count=0
 
 # Process all batch files in missing_routes_wayback
-INPUT_DIR="data/raw/missing_routes"
+INPUT_DIR="data/raw/missing_routes_remain"
 echo "Processing route files from $INPUT_DIR..." | tee -a "$LOG_FILE"
 
 # Get list of all batch CSV files
@@ -69,7 +69,7 @@ for csv_file in "${batch_files[@]}"; do
     echo "Started at: $(date)" | tee -a "$LOG_FILE"
     
     # Run the routes extraction script
-    python notebooks/api/fetch_ors_routes.py \
+    python scripts/api/fetch_ors_routes.py \
         --input-listings-file "$csv_file" \
         --input-poi-file "$POI_FILE" \
         --output-dir "$OUTPUT_DIR" \
