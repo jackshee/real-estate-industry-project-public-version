@@ -20,7 +20,7 @@ else
 fi
 
 # Create output directory if it doesn't exist
-OUTPUT_DIR="data/processed/routes_remain"
+OUTPUT_DIR="data/processed/routes_ptv"
 mkdir -p "$OUTPUT_DIR"
 
 # Define POI file (adjust this path if needed)
