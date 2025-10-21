@@ -70,3 +70,4 @@ echo "   deactivate"
 echo ""
 echo "💡 Tip: You can also run 'source venv/bin/activate' in any terminal"
 echo "   session to activate the environment for that session."
+

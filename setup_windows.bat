@@ -72,3 +72,4 @@ echo 💡 Tip: You can also run 'venv\Scripts\activate' in any Command Prompt
 echo    or PowerShell session to activate the environment for that session.
 echo.
 pause
+
