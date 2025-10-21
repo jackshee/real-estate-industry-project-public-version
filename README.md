@@ -27,6 +27,9 @@ This project scrapes rental property listings from Domain.com.au, extracting key
 │   │   └── settings.py            # Scrapy configuration
 │   ├── scrapy.cfg                 # Scrapy project config
 │   └── README.md                  # Scrapy-specific documentation
+├── setup_mac.sh                   # macOS/Linux virtual environment setup script
+├── setup_windows.bat              # Windows virtual environment setup script
+├── requirements.txt               # Python dependencies
 ├── MAST30034_Project_2_Real_Estate_Spec.pdf  # Project specification
 └── README.md                      # This file
 ```
@@ -35,13 +38,44 @@ This project scrapes rental property listings from Domain.com.au, extracting key
 
 ### 1. Set Up Virtual Environment
 
-This project uses a Python virtual environment to manage dependencies. Follow these steps to set up your environment:
+This project uses a Python virtual environment to manage dependencies. We provide automated setup scripts for both macOS and Windows:
+
+#### Option A: Automated Setup (Recommended)
+
+**For macOS/Linux:**
+```bash
+# Navigate to the project directory
+cd "/Users/jackshee/University/MAST30034 Applied Data Science/project2"
+
+# Run the setup script
+./setup_mac.sh
+```
+
+**For Windows:**
+```cmd
+REM Navigate to the project directory
+cd "C:\path\to\MAST30034 Applied Data Science\project2"
+
+REM Run the setup script
+setup_windows.bat
+```
+
+The setup scripts will:
+- ✅ Check Python installation
+- 📦 Create a virtual environment
+- ⬆️ Upgrade pip to the latest version
+- 📚 Install all project dependencies
+- 🎉 Provide next steps instructions
+
+#### Option B: Manual Setup
+
+If you prefer to set up the environment manually:
 
 ```bash
 # Navigate to the project directory
 cd "/Users/jackshee/University/MAST30034 Applied Data Science/project2"
 
-# Create a new virtual environment (if not already created)
+# Create a new virtual environment
 python3 -m venv venv
 
 # Activate the virtual environment
@@ -191,7 +225,30 @@ Adjust scraping speed in the respective configuration files:
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+### Setup Issues
+
+1. **Setup Script Permission Denied (macOS/Linux)**
+   ```bash
+   chmod +x setup_mac.sh
+   ./setup_mac.sh
+   ```
+
+2. **Python Not Found**
+   - **macOS**: Install Python via Homebrew: `brew install python`
+   - **Windows**: Download from https://python.org and check "Add Python to PATH"
+   - **Linux**: Use package manager: `sudo apt install python3 python3-pip`
+
+3. **Virtual Environment Creation Fails**
+   - Ensure you have write permissions in the project directory
+   - Try running with administrator/sudo privileges if needed
+   - Check if antivirus software is blocking the operation
+
+4. **Package Installation Errors**
+   - Update pip: `pip install --upgrade pip`
+   - Try installing packages individually to identify problematic dependencies
+   - On Windows, you might need Microsoft Visual C++ Build Tools
+
+### Scraping Issues
 
 1. **Connection Errors**
    - Check internet connection
