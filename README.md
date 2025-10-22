@@ -24,6 +24,7 @@ project2/
 │   ├── 2_lasso_var.ipynb          # LASSO feature selection and VAR forecasting
 │   ├── 2_preprocess_forecast.ipynb  # Forecast data preprocessing
 │   ├── 2_sar_analysis.ipynb      # Spatial Autoregression analysis
+│   ├── 2_log_sar_analysis.ipynb  # Log-transformed Spatial Autoregression analysis
 │   ├── 3_affordability.ipynb     # Housing affordability analysis
 │   ├── 3_liveability.ipynb      # Suburb liveability scoring
 │   └── summary_notebook.ipynb    # Project summary and conclusions
@@ -108,13 +109,14 @@ Execute notebooks in the following sequence for complete analysis:
 ### Phase 3: Modeling & Analysis
 7. **`1_model_xgboost_external.ipynb`** - Trains and evaluates XGBoost models for rental price prediction.
 8. **`2_sar_analysis.ipynb`** - Performs Spatial Autoregression analysis to account for spatial dependencies.
+9. **`2_log_sar_analysis.ipynb`** - Performs log-transformed Spatial Autoregression analysis for improved model performance.
 
-### Phase 4: Policy Analysis
-9. **`3_affordability.ipynb`** - Analyzes housing affordability across Victorian suburbs using income-to-rent ratios.
-10. **`3_liveability.ipynb`** - Creates comprehensive liveability scores based on amenities, transport, and quality of life factors.
+### Phase 4: Affordability and Liveability Score
+10. **`3_affordability.ipynb`** - Analyses housing affordability across Victorian suburbs using income-to-rent ratios.
+11. **`3_liveability.ipynb`** - Creates comprehensive liveability scores based on amenities, transport, and quality of life factors.
 
 ### Phase 5: Summary
-11. **`summary_notebook.ipynb`** - Provides project summary, key findings, and conclusions.
+12. **`summary_notebook.ipynb`** - Provides project summary, key findings, and conclusions.
 
 ## 📈 Notebook Descriptions
 
@@ -126,6 +128,7 @@ Execute notebooks in the following sequence for complete analysis:
 - **`2_lasso_var.ipynb`**: Uses LASSO regression for feature selection and VAR models for economic forecasting.
 - **`2_preprocess_forecast.ipynb`**: Prepares forecast data for model training and evaluation.
 - **`2_sar_analysis.ipynb`**: Performs Spatial Autoregression analysis to account for spatial dependencies.
+- **`2_log_sar_analysis.ipynb`**: Performs log-transformed Spatial Autoregression analysis for improved model performance.
 - **`3_affordability.ipynb`**: Analyzes housing affordability across Victorian suburbs using income-to-rent ratios.
 - **`3_liveability.ipynb`**: Creates comprehensive liveability scores based on amenities, transport, and quality of life factors.
 - **`summary_notebook.ipynb`**: Provides project summary, key findings, and conclusions.
