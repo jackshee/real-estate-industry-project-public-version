@@ -1,0 +1,11 @@
+feature,importance
+num__bathrooms,0.19178745
+cat_te__suburb,0.14683877
+num__bedrooms,0.05675941
+num__count_cafe_imputed,0.051366802
+num__year,0.03482311
+cat_ohe__property_type_other,0.028164709
+cat_ohe__property_type_house,0.026943864
+num__count_restaurant_imputed,0.026014512
+num__car_spaces,0.021479301
+num__n_schools_driving_15min,0.0206697
