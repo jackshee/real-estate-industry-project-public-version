@@ -195,6 +195,7 @@ webencodings==0.5.1
 websocket-client==1.8.0
 widgetsnbextension==4.0.14
 wsproto==1.2.0
+xgboost==3.1.1
 xlsxwriter==3.2.5
 xyzservices==2025.4.0
 yarl==1.20.1
