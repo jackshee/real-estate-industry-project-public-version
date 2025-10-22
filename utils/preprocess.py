@@ -1826,3 +1826,701 @@ class PreprocessUtils:
             return combined_data
         else:
             return pd.DataFrame()
+
+    def process_school_data(self, schools_dir="../data/landing/schools"):
+        """
+        Process and standardize school data from multiple CSV files.
+
+        Args:
+            schools_dir (str): Directory containing school CSV files
+
+        Returns:
+            pd.DataFrame: Processed and standardized school data
+        """
+        import os
+        from difflib import get_close_matches
+
+        # List all CSV files in the directory
+        csv_files = [f for f in os.listdir(schools_dir) if f.endswith(".csv")]
+
+        # Define the standardized schema based on common columns across all years
+        standard_columns = [
+            "Address_Line_1",
+            "Address_Line_2",
+            "Address_Postcode",
+            "Address_State",
+            "Address_Town",
+            "Education_Sector",
+            "Entity_Type",
+            "Full_Phone_No",
+            "LGA_ID",
+            "LGA_Name",
+            "Postal_Address_Line_1",
+            "Postal_Address_Line_2",
+            "Postal_Postcode",
+            "Postal_State",
+            "Postal_Town",
+            "School_Name",
+            "School_No",
+            "School_Type",
+            "X",
+            "Y",
+            # Additional columns that exist in some years
+            "Area",
+            "LGA_TYPE",
+            "Region",
+            "School_Status",
+        ]
+
+        def standardize_school_dataframe(df, year):
+            """Standardize a school dataframe to have consistent columns."""
+            # Create a copy to avoid modifying the original
+            df_std = df.copy()
+
+            # Handle column name variations
+            column_mapping = {
+                "AREA_Name": "Area",  # 2024 has AREA_Name instead of Area
+                "Region_Name": "Region",  # 2024 has Region_Name instead of Region
+            }
+
+            # Rename columns
+            df_std = df_std.rename(columns=column_mapping)
+
+            # Add missing columns with NaN values
+            for col in standard_columns:
+                if col not in df_std.columns:
+                    df_std[col] = None
+
+            # Reorder columns to match standard schema
+            df_std = df_std[standard_columns]
+
+            # Add year column to indicate when school was established
+            df_std["establishment_year"] = year
+
+            return df_std
+
+        # Load and standardize all school datasets
+        print("Loading and standardizing all school datasets...")
+        standardized_dfs = []
+
+        for file in csv_files:
+            year = file.split("_")[-1].split(".")[0]  # Extract year from filename
+            print(f"\nProcessing {file} (year: {year})")
+
+            # Load the full dataset
+            try:
+                df = pd.read_csv(os.path.join(schools_dir, file), encoding="utf-8")
+            except UnicodeDecodeError:
+                df = pd.read_csv(os.path.join(schools_dir, file), encoding="latin1")
+
+            print(f"  Loaded {len(df)} schools")
+
+            # Standardize the dataframe
+            df_std = standardize_school_dataframe(df, year)
+            standardized_dfs.append(df_std)
+
+            print(f"  Standardized to {len(df_std.columns)} columns")
+
+        # Combine all standardized dataframes
+        print(f"\nCombining {len(standardized_dfs)} datasets...")
+        combined_schools = pd.concat(standardized_dfs, ignore_index=True)
+
+        print(f"Combined dataset shape: {combined_schools.shape}")
+        print(f"Total schools: {len(combined_schools)}")
+        print(f"\nEstablishment year distribution:")
+        print(combined_schools["establishment_year"].value_counts().sort_index())
+
+        # Select relevant columns
+        combined_schools = combined_schools[
+            [
+                "School_Name",
+                "Education_Sector",
+                "School_Type",
+                "School_Status",
+                "establishment_year",
+                "X",
+                "Y",
+            ]
+        ]
+
+        # Convert the X, Y columns to a Point object from shapely
+        from shapely.geometry import Point
+
+        combined_schools["coordinates"] = combined_schools.apply(
+            lambda row: Point(row["X"], row["Y"]), axis=1
+        )
+
+        # Round the X, Y columns to 1 decimal place
+        combined_schools["X"] = combined_schools["X"].round(1)
+        combined_schools["Y"] = combined_schools["Y"].round(1)
+
+        # Remove schools with the same fuzzy matched name and X and Y duplicates at 1 dp
+        to_drop = set()
+        name_to_indices = {}
+        for idx, row in combined_schools.iterrows():
+            name = row["School_Name"]
+            x = row["X"]
+            y = row["Y"]
+
+            # Find close matches to the current school name
+            close_matches = get_close_matches(
+                name, name_to_indices.keys(), n=1, cutoff=0.99
+            )
+
+            if close_matches:
+                matched_name = close_matches[0]
+                for matched_idx in name_to_indices[matched_name]:
+                    matched_row = combined_schools.loc[matched_idx]
+                    if matched_row["X"] == x and matched_row["Y"] == y:
+                        # If X and Y also match, mark the current index for dropping
+                        to_drop.add(idx)
+                        break
+
+            # Add the current index to the mapping
+            if name not in name_to_indices:
+                name_to_indices[name] = []
+            name_to_indices[name].append(idx)
+
+        print(
+            f"Dropping {len(to_drop)} duplicate schools based on fuzzy name and coordinates match."
+        )
+        combined_schools = combined_schools.drop(index=to_drop).reset_index(drop=True)
+        print(f"Dataset shape after removing duplicates: {combined_schools.shape}")
+
+        # Sort by school_name
+        combined_schools = combined_schools.sort_values(by="School_Name")
+
+        # Remove 'School_Type' where it is 'Language', 'Camp'
+        combined_schools = combined_schools[
+            ~combined_schools["School_Type"].isin(["Language", "Camp"])
+        ]
+
+        # Remove 'School_Status' where it is 'Closed'
+        combined_schools = combined_schools[combined_schools["School_Status"] != "C"]
+
+        # Drop School_Status column
+        combined_schools = combined_schools.drop(columns=["School_Status"])
+
+        # Convert column names to lower casing
+        combined_schools.columns = combined_schools.columns.str.lower()
+
+        # Check for duplicate school_name
+        duplicate_schools = combined_schools[
+            combined_schools.duplicated(subset=["school_name"])
+        ]
+
+        # Group duplicate_schools by school_name, education_sector, school_type, establishment_year and count the number of occurences
+        duplicate_schools_grouped = (
+            duplicate_schools.groupby(
+                ["school_name", "education_sector", "school_type", "establishment_year"]
+            )
+            .size()
+            .reset_index(name="count")
+        )
+
+        # Get the school_name from duplicate_schools_grouped where count is greater than 1
+        duplicate_school_names = duplicate_schools_grouped[
+            duplicate_schools_grouped["count"] > 1
+        ]["school_name"]
+
+        # Remove schools with duplicate names
+        combined_schools_unique = combined_schools[
+            ~combined_schools["school_name"].isin(duplicate_school_names)
+        ]
+
+        return combined_schools_unique
+
+    def scrape_school_rankings(self):
+        """
+        Scrape school rankings from Better Education website.
+
+        Returns:
+            pd.DataFrame: School rankings data
+        """
+        import io
+        import requests
+        import re
+        from difflib import get_close_matches
+
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-AU,en;q=0.9",
+            "Referer": "https://bettereducation.com.au/Results/vce.aspx",
+            "Cache-Control": "no-cache",
+        }
+        url = "https://bettereducation.com.au/Results/vce.aspx"
+        resp = requests.get(url, headers=headers, timeout=30)
+
+        resp.raise_for_status()
+
+        tables = pd.read_html(io.StringIO(resp.text))  # no match -> gets all tables
+
+        school_rank_df = tables[1].copy()
+        # make the Better Education Rank columns go from 1 to 100 including every number in between
+        school_rank_df["Better Education Rank"] = range(1, 101)
+
+        return school_rank_df
+
+    def add_school_rankings(self, schools_df, school_rank_df):
+        """
+        Add school rankings to the schools dataframe.
+
+        Args:
+            schools_df (pd.DataFrame): Schools dataframe
+            school_rank_df (pd.DataFrame): School rankings dataframe
+
+        Returns:
+            pd.DataFrame: Schools dataframe with rankings added
+        """
+        import re
+        from difflib import get_close_matches
+
+        # Process school rankings
+        school_rank_df.columns = [c.lower().strip() for c in school_rank_df.columns]
+        school_rank_df = school_rank_df.rename(
+            columns={
+                "better education rank": "vic_secondary_rank",
+                "school": "school_name",
+            }
+        )
+        school_rank_df["school_name"] = school_rank_df["school_name"].str.strip()
+        school_rank_df = school_rank_df[
+            pd.to_numeric(school_rank_df["vic_secondary_rank"], errors="coerce").notna()
+        ]
+        school_rank_df["vic_secondary_rank"] = school_rank_df[
+            "vic_secondary_rank"
+        ].astype(int)
+
+        def normalize(name: str) -> str:
+            if not isinstance(name, str):
+                return ""
+            cleaned = name.lower().replace("'", "'").replace("–", "-").strip()
+            # drop everything after the first comma (suburb/campus info)
+            cleaned = cleaned.split(",", 1)[0]
+            cleaned = re.sub(r"\s+", " ", cleaned)
+            return cleaned
+
+        # ranking table
+        school_rank_df["name_norm"] = school_rank_df["school_name"].map(normalize)
+        lookup_norm = dict(
+            zip(school_rank_df["name_norm"], school_rank_df["vic_secondary_rank"])
+        )
+
+        # schools.csv
+        schools_df["school_name_norm"] = schools_df["school_name"].map(normalize)
+
+        def lookup_fuzzy(name, candidates, cutoff=0.8):
+            matches = get_close_matches(name, candidates, n=1, cutoff=cutoff)
+            return matches[0] if matches else None
+
+        candidate_names = list(lookup_norm.keys())
+
+        def assign_rank(row):
+            rank = lookup_norm.get(row["school_name_norm"])
+            if rank is None:
+                # try fuzzy match against known names (casefolded) and goes both way for better matching
+                match = lookup_fuzzy(
+                    row["school_name_norm"], candidate_names, cutoff=0.85
+                )
+                if match:
+                    rank = lookup_norm[match]
+            school_type = row["school_type"].strip().lower()
+            if rank:
+                return rank
+            if school_type not in {"secondary", "pri/sec"}:
+                return None
+            return 101
+
+        schools_df["vic_secondary_rank"] = schools_df.apply(assign_rank, axis=1)
+        schools_df = schools_df.drop(columns=["school_name_norm"])
+
+        return schools_df
+
+    def calculate_school_goodness(self, schools_df):
+        """
+        Calculate school goodness scores based on rankings.
+
+        Args:
+            schools_df (pd.DataFrame): Schools dataframe with rankings
+
+        Returns:
+            pd.DataFrame: Schools dataframe with goodness scores
+        """
+        import numpy as np
+
+        eps = 0.0001
+
+        # make a school goodness column based on the vic_secondary_rank
+        def school_goodness(rank):
+            if pd.isna(rank):
+                return "N/A"
+            else:
+                goodness = 1 - (
+                    np.log(rank) / (np.log(101)) + eps
+                )  # Normalized log rank
+                return round(goodness, 4)
+
+        schools_df["school_goodness"] = schools_df["vic_secondary_rank"].map(
+            school_goodness
+        )
+
+        return schools_df
+
+    def find_best_schools_per_isochrone(self, listings_gdf, schools_gdf, iso_columns):
+        """
+        Find the best school for each isochrone based on spatial analysis.
+
+        Args:
+            listings_gdf (gpd.GeoDataFrame): Listings with isochrones
+            schools_gdf (gpd.GeoDataFrame): Schools data
+            iso_columns (list): List of isochrone column names
+
+        Returns:
+            gpd.GeoDataFrame: Listings with best school features added
+        """
+        import geopandas as gpd
+        from pyproj import Geod
+        from shapely import wkt, ops
+
+        def safe_wkt(value):
+            if pd.isna(value):
+                return None
+            value = str(value).strip()
+            if not value:
+                return None
+            try:
+                return wkt.loads(value)
+            except Exception:
+                return None
+
+        def to_geom(val):
+            if isinstance(val, str):
+                cleaned = val.strip()
+                if cleaned.lower() in {"", "nan", "none"}:
+                    return None
+                return wkt.loads(cleaned)
+            if pd.isna(val):
+                return None
+            return val  # already a geometry
+
+        def clean_geom_cell(val):
+            if isinstance(val, str) and val.strip().lower() in {"", "nan", "none"}:
+                return pd.NA
+            if pd.isna(val):
+                return pd.NA
+            return val
+
+        def swap_axes(geom):
+            return ops.transform(lambda x, y, z=None: (y, x), geom)
+
+        # Process isochrone columns
+        for col in iso_columns:
+            listings_gdf[col] = listings_gdf[col].map(safe_wkt)
+
+        for col in iso_columns:
+            listings_gdf[f"geom_{col}"] = listings_gdf[col].apply(to_geom)
+
+        listings_gdf["year"] = listings_gdf["year"].astype("Int64")
+
+        schools_gdf["establishment_year"] = (
+            pd.to_numeric(schools_gdf["establishment_year"], errors="coerce")
+            .round()
+            .astype("Int64")  # null-friendly
+        )
+        schools_gdf["geometry"] = schools_gdf["coordinates"].apply(safe_wkt)
+        schools_gdf["coordinates"] = schools_gdf["coordinates"].apply(safe_wkt)
+        schools_gdf = gpd.GeoDataFrame(
+            schools_gdf, geometry="geometry", crs="EPSG:4326"
+        )
+
+        geod = Geod(ellps="WGS84")
+        beta = 0.2  # equivalent to lambda = 1/ beta
+
+        def score_row(goodness, dist_km):
+            return goodness / (1 + beta * dist_km)
+
+        all_results = []
+        iso_columns2 = [
+            c for c in iso_columns if c.endswith("min") and "geom_" not in c
+        ]
+
+        for col in iso_columns2:
+            poly_col = f"geom_{col}"
+            # activate polygon geometry and drop rows without polygons
+            iso_poly = listings_gdf.set_geometry(poly_col)
+            iso_poly = iso_poly[iso_poly[poly_col].notna()]
+            iso_poly = iso_poly.set_crs(
+                "EPSG:4326", allow_override=True
+            )  # define if missing
+
+            # spatial join: schools inside polygon (keep listing_point column intact)
+            joined = gpd.sjoin(
+                iso_poly,
+                schools_gdf,
+                how="left",
+                predicate="covers",
+                rsuffix="school",
+            )
+
+            # only keep schools that existed by first_listed_year (or unknown year)
+            mask = joined["establishment_year"].isna() | (
+                joined["establishment_year"] <= joined["year"]
+            )
+            joined = joined[mask]
+
+            if not joined.empty:
+                # geodesic distance from listing point to school
+                lon1 = joined["listing_point"].apply(lambda g: g.x).values
+                lat1 = joined["listing_point"].apply(lambda g: g.y).values
+                lon2 = gpd.GeoSeries(joined["coordinates_school"]).x
+                lat2 = gpd.GeoSeries(joined["coordinates_school"]).y
+                _, _, dists_m = geod.inv(lon1, lat1, lon2, lat2)
+                joined["dist_km"] = dists_m / 1000.0
+
+                joined["school_goodness"] = pd.to_numeric(
+                    joined["school_goodness"], errors="coerce"
+                )
+                joined["dist_km"] = pd.to_numeric(joined["dist_km"], errors="coerce")
+
+                valid = joined["school_goodness"].notna() & joined["dist_km"].notna()
+                joined["score"] = pd.NA
+                joined.loc[valid, "score"] = score_row(
+                    joined.loc[valid, "school_goodness"], joined.loc[valid, "dist_km"]
+                )
+
+                # a count of how many schools within a given isochrone
+                count = (
+                    joined.groupby("property_id")["school_name"]
+                    .count()  # counts rows in each group
+                    .rename(f"n_schools_{col}")  # e.g., n_schools_driving_5min
+                    .to_frame()
+                )
+
+                best_inside = (
+                    joined.dropna(subset=["score"])
+                    .sort_values("score", ascending=False)
+                    .groupby("property_id")
+                    .head(1)
+                    .set_index("property_id")
+                )
+
+                # build out indexed by property_id
+                out = (
+                    iso_poly[["property_id"]].drop_duplicates().set_index("property_id")
+                )
+                for c in [
+                    f"best_school_name_{col}",
+                    f"best_school_coord_{col}",
+                    f"best_score_{col}",
+                    f"best_dist_km_{col}",
+                ]:
+                    out[c] = None
+
+                if not best_inside.empty:
+                    idx = best_inside.index
+                    out.loc[idx, f"best_school_name_{col}"] = best_inside[
+                        "school_name"
+                    ].to_numpy()
+                    out.loc[idx, f"best_school_coord_{col}"] = best_inside[
+                        "coordinates_school"
+                    ].to_numpy()
+                    out.loc[idx, f"best_score_{col}"] = best_inside["score"].to_numpy()
+                    out.loc[idx, f"best_dist_km_{col}"] = best_inside[
+                        "dist_km"
+                    ].to_numpy()
+
+                # join back to listings_gdf by property_id
+                all_results.append(out)
+                all_results.append(count)
+
+        final_out = pd.concat(
+            all_results, axis=1
+        )  # columns are already unique per {col}
+        overlap = final_out.columns.intersection(listings_gdf.columns)
+        listings_gdf = listings_gdf.drop(columns=overlap, errors="ignore").join(
+            final_out, on="property_id"
+        )
+
+        return listings_gdf
+
+    def impute_missing_school_features(self, listings_gdf):
+        """
+        Impute missing school features using nearest neighbour logic.
+
+        Args:
+            listings_gdf (gpd.GeoDataFrame): Listings with school features
+
+        Returns:
+            gpd.GeoDataFrame: Listings with imputed school features
+        """
+        fields = ["best_school_name", "best_school_coord", "best_score", "best_dist_km"]
+
+        def all_fields_present(df, token):
+            mode, dur = token.split("_", 1)
+            cols = [
+                f"{f}_{mode}_{dur}" for f in fields if f"{f}_{mode}_{dur}" in df.columns
+            ]
+            if not cols:
+                return pd.Series(False, index=df.index)
+            return df[cols].notna().all(axis=1)
+
+        # availability for every token we might touch
+        tokens = [
+            "walking_5min",
+            "walking_10min",
+            "walking_15min",
+            "driving_5min",
+            "driving_10min",
+            "driving_15min",
+        ]
+        avail = {tok: all_fields_present(listings_gdf, tok) for tok in tokens}
+
+        # per-target fallback order
+        fallback = {
+            "walking_5min": [
+                "walking_10min",
+                "walking_15min",
+                "driving_5min",
+                "driving_10min",
+                "driving_15min",
+            ],
+            "walking_10min": [
+                "walking_15min",
+                "driving_5min",
+                "driving_10min",
+                "driving_15min",
+            ],
+            "walking_15min": ["driving_5min", "driving_10min", "driving_15min"],
+            "driving_5min": ["driving_10min", "driving_15min"],
+            "driving_10min": ["driving_5min", "driving_15min"],
+            "driving_15min": ["driving_10min", "driving_5min"],
+        }
+
+        for target in [
+            "walking_5min",
+            "walking_10min",
+            "driving_5min",
+            "driving_10min",
+            "driving_15min",
+        ]:
+            mode_tgt, dur_tgt = target.split("_", 1)
+            target_cols = [
+                f"{f}_{mode_tgt}_{dur_tgt}"
+                for f in fields
+                if f"{f}_{mode_tgt}_{dur_tgt}" in listings_gdf.columns
+            ]
+            if not target_cols:
+                continue
+
+            missing = listings_gdf[target_cols].isna().all(axis=1)
+            filled = pd.Series(False, index=listings_gdf.index)
+
+            for candidate in fallback.get(target, []):
+                rows = missing & avail[candidate] & ~filled
+                if not rows.any():
+                    continue
+
+                mode_src, dur_src = candidate.split("_", 1)
+                for f in fields:
+                    src_col = f"{f}_{mode_src}_{dur_src}"
+                    tgt_col = f"{f}_{mode_tgt}_{dur_tgt}"
+                    if (
+                        src_col in listings_gdf.columns
+                        and tgt_col in listings_gdf.columns
+                    ):
+                        listings_gdf.loc[rows, tgt_col] = listings_gdf.loc[
+                            rows, src_col
+                        ].values
+
+                tgt_cnt = f"n_schools_{mode_tgt}_{dur_tgt}"
+                src_cnt = f"n_schools_{mode_src}_{dur_src}"
+                if tgt_cnt in listings_gdf.columns and src_cnt in listings_gdf.columns:
+                    need = rows & listings_gdf[tgt_cnt].fillna(0).eq(0)
+                    listings_gdf.loc[need, tgt_cnt] = listings_gdf.loc[
+                        need, src_cnt
+                    ].values
+
+                filled |= rows  # stop once we copy from the first available candidate
+
+        return listings_gdf
+
+    def finalize_school_features(self, listings_gdf):
+        """
+        Finalize school features by filling remaining missing values.
+
+        Args:
+            listings_gdf (gpd.GeoDataFrame): Listings with school features
+
+        Returns:
+            gpd.GeoDataFrame: Listings with finalized school features
+        """
+        score_cols = [c for c in listings_gdf.columns if c.startswith("best_score_")]
+        listings_gdf[score_cols] = listings_gdf[score_cols].fillna(
+            3e-8
+        )  # Justification can be asked by venura(formula with reasonably max args)
+        dist_cols = [c for c in listings_gdf.columns if c.startswith("best_dist_km_")]
+        for col in dist_cols:
+            max_val = listings_gdf[col].max(skipna=True)
+            listings_gdf[col] = listings_gdf[col].fillna(
+                max_val + 1 if pd.notna(max_val) else 1.0
+            )
+
+        count_cols = [c for c in listings_gdf.columns if c.startswith("n_schools_")]
+        listings_gdf[count_cols] = listings_gdf[count_cols].fillna(0)
+
+        return listings_gdf
+
+    def process_school_features_workflow(
+        self, listings_gdf, schools_dir="../data/landing/schools"
+    ):
+        """
+        Complete workflow to process school features for listings.
+
+        Args:
+            listings_gdf (gpd.GeoDataFrame): Listings with isochrones
+            schools_dir (str): Directory containing school CSV files
+
+        Returns:
+            gpd.GeoDataFrame: Listings with school features added
+        """
+        print("=== PROCESSING SCHOOL FEATURES ===")
+
+        # Step 1: Process school data
+        print("Step 1: Processing school data...")
+        schools_df = self.process_school_data(schools_dir)
+
+        # Step 2: Scrape and add rankings
+        print("Step 2: Adding school rankings...")
+        school_rank_df = self.scrape_school_rankings()
+        schools_df = self.add_school_rankings(schools_df, school_rank_df)
+
+        # Step 3: Calculate school goodness scores
+        print("Step 3: Calculating school goodness scores...")
+        schools_df = self.calculate_school_goodness(schools_df)
+
+        # Step 4: Find best schools per isochrone
+        print("Step 4: Finding best schools per isochrone...")
+        iso_columns = [
+            c
+            for c in listings_gdf.columns
+            if c.endswith("min_imputed") or c.endswith("min")
+        ]
+        listings_gdf = self.find_best_schools_per_isochrone(
+            listings_gdf, schools_df, iso_columns
+        )
+
+        # Step 5: Impute missing school features
+        print("Step 5: Imputing missing school features...")
+        listings_gdf = self.impute_missing_school_features(listings_gdf)
+
+        # Step 6: Finalize school features
+        print("Step 6: Finalizing school features...")
+        listings_gdf = self.finalize_school_features(listings_gdf)
+
+        print("School features processing completed!")
+
+        return listings_gdf
