@@ -1,4 +1,4 @@
-date,year,quarter,CPI (%/y),WPI (%/y),"PPI, Final Demand (%/y)",Unemployment rate (%),SFD (%/y),GSP quarterly components (%/y),State final demand (%/y),Household consumption (pp/y),Dwelling investment (pp/y),Business investment (pp/y),Government spending (pp/y),Population (%/y),Natural increase (pp/y),Net overseas migration (pp/y),Net interstate migration (pp/y),Mortgage rates (%),Savings rates (%),Cash rate (%),quarter_id
+date,year,quarter,cpi,wpi,ppi,unemployment_rate,sfd,gsp,state_final_demand,household_consumption,dwelling_investment,business_investment,government_spending,population,natural_increase,net_overseas_migration,net_interstate_migration,mortgage_rates,savings_rates,cash_rate,quarter_id
 1949-09-01,1949,3,7.9,,,,,,,,,,,,,,,,,,1949Q3
 1949-12-01,1949,4,10.5,,,,,,,,,,,,,,,,,,1949Q4
 1950-03-01,1950,1,10.3,,,,,,,,,,,,,,,,,,1950Q1
