@@ -594,7 +594,7 @@ Examples:
 
     parser.add_argument(
         "--output-dir",
-        help="Output directory for isochrone data (default: data/processed/isochrones/wayback/{profile})",
+        help="Output directory for isochrone data (default: data/processed/isochrones_{profile}/)",
     )
 
     parser.add_argument(
@@ -609,7 +609,7 @@ Examples:
 
     # Set output directory based on profile if not specified
     if not args.output_dir:
-        args.output_dir = f"data/processed/isochrones_remaining/{args.profile}"
+        args.output_dir = f"data/processed/isochrones_{args.profile}/"
 
     # Set up logging
     logger = setup_logging()

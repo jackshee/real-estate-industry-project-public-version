@@ -29,14 +29,14 @@ else
 fi
 
 # Create output directory if it doesn't exist
-mkdir -p data/processed/poi_features_remain
+mkdir -p data/processed/poi_features
 
 # Run all 28 batch scripts in series
 for i in {1..28}; do
     # Format the batch number with leading zeros
     batch_num=$(printf "%04d" $i)
-    csv_file="data/raw/missing_poi_remain/batch_${batch_num}.csv"
-    log_file="poi_batch_processing_remain_part${i}.log"
+    csv_file="data/raw/missing_poi/batch_${batch_num}.csv"
+    log_file="poi_batch_processing${i}.log"
     
     echo "==========================================" | tee -a "$MAIN_LOG_FILE"
     echo "Starting batch $i/28..." | tee -a "$MAIN_LOG_FILE"
