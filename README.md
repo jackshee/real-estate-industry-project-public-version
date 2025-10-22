@@ -1,16 +1,16 @@
 # MAST30034 Applied Data Science - Real Estate Analysis Project
 
-A comprehensive data science project analyzing Victorian rental property markets through web scraping, feature engineering, machine learning, and spatial analysis.
+A comprehensive data science project analysing Victorian rental property markets through web scraping, feature engineering, machine learning, and spatial analysis.
 
 ## 🏠 Project Overview
 
-This project analyzes rental property markets across Victoria, Australia, combining web-scraped property data with economic indicators, demographic information, and spatial amenities to predict rental prices and assess suburb liveability.
+This project analyses rental property markets across Victoria, Australia, combining web-scraped property data with economic indicators, demographic information, and spatial amenities to predict rental prices and assess suburb liveability.
 
 ## 📁 Repository Structure
 
 ```
 project2/
-├── data/                           # Data storage organized by processing stage
+├── data/                           # Data storage organised by processing stage
 │   ├── landing/                    # Raw scraped data from Domain.com.au
 │   ├── curated/                    # Cleaned and processed datasets
 │   ├── processed/                  # Feature-engineered data
@@ -50,7 +50,7 @@ project2/
 **For macOS/Linux:**
 ```bash
 # Navigate to the project directory
-cd "/Users/jackshee/University/MAST30034 Applied Data Science/project2"
+cd "MAST30034 Applied Data Science/project2"
 
 # Run the setup script
 chmod +x setup_mac.sh
