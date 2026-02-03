@@ -151,6 +151,10 @@ httpcache/
 
 # Data files
 /data
+# But allow geo data file (required for scraping)
+!/data/geo/vic_suburbs_postcodes.csv
+# And allow scraped data structure (for version control)
+!/data/landing/domain/live/
 /geovisualization/SA2_2021_AUST_SHP_GDA2020
 /geovisualization/VMADMIN
 /geovisualization/32350DS0005_2001-24.xlsx
